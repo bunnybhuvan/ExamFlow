@@ -94,6 +94,7 @@ def generate_dataset(db: Session, p):
                 room.closures = [{"start": closed_day.isoformat(), "end": closed_day.isoformat(), "reason":"Controlled closure test"}]
             target.window_start = closed_day
             target.window_end = closed_day
+            target.duration_minutes = 90
             target.required_equipment = []
             rows = db.query(Enrollment).filter_by(exam_id=target.id).order_by(Enrollment.student_id).all()
             for row in rows[80:]:
