@@ -123,6 +123,7 @@ def generate_dataset(db: Session, p):
             for ex in exams[2:4]:
                 ex.window_start = date.fromisoformat(constrained_day)
                 ex.window_end = date.fromisoformat(constrained_day)
+                ex.duration_minutes = 90
                 ex.required_equipment = []
             for inv in invigilators:
                 inv.available_days = [d for d in (inv.available_days or []) if d != constrained_day]
