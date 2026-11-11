@@ -69,7 +69,7 @@ def test_labelled_edge_cases_are_separate_and_never_break_hard_constraints(clien
 
     result=client.post("/api/v1/schedules/generate",json={
         "start_date":"2026-12-07","end_date":"2027-01-01","daily_start":"09:00",
-        "daily_end":"18:00","break_buffer_minutes":15,"seed":20261111,"strategy":"balanced"
+        "daily_end":"10:30","break_buffer_minutes":15,"seed":20261111,"strategy":"balanced"
     })
     assert result.status_code == 200, result.text
     reasons={x["reason_code"] for x in client.get("/api/v1/schedules/unassigned").json()}
