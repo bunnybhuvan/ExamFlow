@@ -70,7 +70,9 @@ def generate_dataset(db: Session, p):
         labels = []
         if len(exams) >= 2 and len(students) >= 3:
             # Controlled shared cohort: the solver must place these exams in non-overlapping slots.
-            for sid in [students[0].id, students[1].id, students[2].id]:
+            cohort = [s for s in students[1:] if not s.accommodations][:3]
+            for student in cohort:
+                sid = student.id
                 if not db.query(Enrollment).filter_by(student_id=sid, exam_id=exams[0].id).first():
                     db.add(Enrollment(student_id=sid, exam_id=exams[0].id))
                 if not db.query(Enrollment).filter_by(student_id=sid, exam_id=exams[1].id).first():
@@ -98,6 +100,11 @@ def generate_dataset(db: Session, p):
             target.window_end = closed_day
             target.duration_minutes = 90
             target.required_equipment = []
+            rows = db.query(Enrollment).filter_by(exam_id=target.id).order_by(Enrollment.student_id).all()
+            for row in rows:
+                student = db.get(Student, row.student_id)
+                if student and student.accommodations:
+                    db.delete(row)
             rows = db.query(Enrollment).filter_by(exam_id=target.id).order_by(Enrollment.student_id).all()
             for row in rows[80:]:
                 db.delete(row)
@@ -138,6 +145,11 @@ def generate_dataset(db: Session, p):
             # Keep both test exams below the two-invigilator threshold so the single available
             # invigilator can cover one, while the other must remain unassigned.
             for ex in exams[2:4]:
+                rows = db.query(Enrollment).filter_by(exam_id=ex.id).order_by(Enrollment.student_id).all()
+                for row in rows:
+                    student = db.get(Student, row.student_id)
+                    if student and student.accommodations:
+                        db.delete(row)
                 rows = db.query(Enrollment).filter_by(exam_id=ex.id).order_by(Enrollment.student_id).all()
                 for row in rows[80:]:
                     db.delete(row)
