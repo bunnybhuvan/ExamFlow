@@ -55,3 +55,29 @@ def test_csv_export_requires_valid_format(client):
     response=client.get("/api/v1/exports/csv")
     assert response.status_code == 200
     assert "text/csv" in response.headers["content-type"]
+
+
+def test_labelled_edge_cases_are_separate_and_never_break_hard_constraints(client):
+    generated=client.post("/api/v1/datasets/generate",json={
+        "seed":20261111,"students":500,"exams":12,"rooms":10,"invigilators":12,"include_edge_cases":True
+    })
+    assert generated.status_code == 200, generated.text
+    labels=client.get("/api/v1/edge-cases").json()
+    codes={x["case_code"] for x in labels}
+    assert {"STUDENT_OVERLAP","INSUFFICIENT_ROOM_CAPACITY","EXAM_IN_CLOSED_ROOMS",
+            "ACCOMMODATION_UNAVAILABLE","INVIGILATOR_DOUBLE_BOOKING"} <= codes
+
+    result=client.post("/api/v1/schedules/generate",json={
+        "start_date":"2026-12-07","end_date":"2027-01-01","daily_start":"09:00",
+        "daily_end":"18:00","break_buffer_minutes":15,"seed":20261111,"strategy":"balanced"
+    })
+    assert result.status_code == 200, result.text
+    reasons={x["reason_code"] for x in client.get("/api/v1/schedules/unassigned").json()}
+    assert "NO_ROOM_CAPACITY" in reasons
+    assert "ROOM_CLOSED" in reasons
+    assert "ACCOMMODATION_CONFLICT" in reasons
+    assert "NO_INVIGILATOR" in reasons
+
+    validation=client.get("/api/v1/reports/validation").json()
+    assert validation["failed"] == 0
+    assert all(check["violations"] == 0 for check in validation["checks"])
