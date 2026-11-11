@@ -1,4 +1,4 @@
-import random, time, uuid
+import random, time, uuid, math
 from datetime import date, datetime, time as dtime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -50,7 +50,9 @@ def generate_dataset(db: Session, p):
         first, last = rng.choice(FIRST), rng.choice(LAST)
         students.append(Student(id=f"STU-{i+1:06d}", name=f"{first} {last}",
             email=f"student{i+1:06d}@examflow.test", program=rng.choice(DEPARTMENTS),
-            year=rng.randint(1, 4), accommodations=[]))
+            year=rng.randint(1, 4), accommodations=(["extra_time_25"] if rng.random() < .015 else
+                ["accessible_seating"] if rng.random() < .02 else
+                ["screen_reader"] if rng.random() < .025 else [])))
         count = min(len(exams), rng.randint(3, 6))
         for exam in rng.sample(exams, count):
             enrollments.append(Enrollment(student_id=f"STU-{i+1:06d}", exam_id=exam.id))
@@ -199,7 +201,22 @@ def generate_schedule(db: Session, p):
     assigned, unassigned = [], []
     for ex in exams:
         eligible_students = enrollment_map.get(ex.id, [])
-        needs_access = any(any(k in (student_by_id[sid].accommodations or []) for k in ["accessible_seating","wheelchair"]) for sid in eligible_students if sid in student_by_id)
+        accommodation_tags = {str(tag).strip().lower().replace(" ", "_").replace("%", "")
+            for tag in (ex.accommodations or [])}
+        for sid in eligible_students:
+            if sid in student_by_id:
+                accommodation_tags.update(str(tag).strip().lower().replace(" ", "_").replace("%", "")
+                    for tag in (student_by_id[sid].accommodations or []))
+        if "separate_room" in accommodation_tags:
+            unassigned.append((ex,"UNSUPPORTED_ACCOMMODATION","Separate-room accommodation requires multi-room exam splitting, which this version does not support."))
+            ex.status="unassigned"; continue
+        needs_access = bool(accommodation_tags & {"accessible_seating","wheelchair","accessible"})
+        needs_extra_time = bool(accommodation_tags & {"extra_time_25","extra_time","25_extra_time"})
+        needs_screen_reader = "screen_reader" in accommodation_tags
+        effective_duration = math.ceil(ex.duration_minutes * 1.25) if needs_extra_time else ex.duration_minutes
+        required_equipment = set(ex.required_equipment or [])
+        if needs_screen_reader:
+            required_equipment.add("Computers")
         candidate_dates = [s for s in slots if ex.window_start <= s.date() <= ex.window_end]
         if p.strategy == "balanced":
             candidate_dates.sort(key=lambda slot:(day_load.get(slot.date().isoformat(),0),slot))
@@ -217,18 +234,20 @@ def generate_schedule(db: Session, p):
         if needs_access and not any(r.accessible and r.capacity >= ex.enrollment for r in rooms):
             unassigned.append((ex,"ACCOMMODATION_CONFLICT","No room satisfies the accessibility accommodation and capacity requirements."))
             ex.status="unassigned"; continue
-        if ex.required_equipment and not any(set(ex.required_equipment).issubset(set(r.equipment or [])) and r.capacity >= ex.enrollment for r in rooms):
-            unassigned.append((ex,"EQUIPMENT_UNAVAILABLE","No sufficiently large room provides all required equipment."))
+        if required_equipment and not any(required_equipment.issubset(set(r.equipment or [])) and r.capacity >= ex.enrollment for r in rooms):
+            code = "ACCOMMODATION_CONFLICT" if needs_screen_reader else "EQUIPMENT_UNAVAILABLE"
+            reason = "No sufficiently large room provides the computer equipment required by a screen-reader accommodation." if needs_screen_reader else "No sufficiently large room provides all required equipment."
+            unassigned.append((ex,code,reason))
             ex.status="unassigned"; continue
         placed = None
         saw_closed = False; saw_room = False; saw_inv = False; saw_student = False
         for start_dt in candidate_dates:
-            end_dt = start_dt + timedelta(minutes=ex.duration_minutes)
+            end_dt = start_dt + timedelta(minutes=effective_duration)
             if end_dt.time() > day_end: continue
             day_key = start_dt.date().isoformat()
             candidate_rooms = sorted([r for r in rooms if r.capacity >= ex.enrollment
                 and (not needs_access or r.accessible)
-                and set(ex.required_equipment or []).issubset(set(r.equipment or []))],
+                and required_equipment.issubset(set(r.equipment or []))],
                 key=lambda r:(r.capacity, r.id))
             for room in candidate_rooms:
                 closures = room.closures or []
@@ -344,8 +363,13 @@ def validation_report(db: Session):
         e=exams[a["exam_id"]]; r=rooms[a["room_id"]]
         start=datetime.fromisoformat(a["start"]); end=datetime.fromisoformat(a["end"]); day=start.date().isoformat()
         if r.capacity<e.enrollment: cap.append({"entity_type":"exam","entity_id":e.id,"message":"Room capacity is below exam enrollment."})
-        if not r.accessible and any(any(k in (students[sid].accommodations or []) for k in ["accessible_seating","wheelchair"]) for sid in enrol.get(e.id,set()) if sid in students):
+        enrolled_accommodations = {str(tag).strip().lower().replace(" ", "_").replace("%", "")
+            for sid in enrol.get(e.id,set()) if sid in students for tag in (students[sid].accommodations or [])}
+        enrolled_accommodations.update(str(tag).strip().lower().replace(" ", "_").replace("%", "") for tag in (e.accommodations or []))
+        if not r.accessible and enrolled_accommodations & {"accessible_seating","wheelchair","accessible"}:
             accom.append({"entity_type":"exam","entity_id":e.id,"message":"An enrolled student requires accessible seating but the assigned room is not accessible."})
+        if "screen_reader" in enrolled_accommodations and "Computers" not in (r.equipment or []):
+            accom.append({"entity_type":"exam","entity_id":e.id,"message":"An enrolled student requires screen-reader support but the assigned room lacks computer equipment."})
         if any(c.get("start","")<=day<=c.get("end","") for c in (r.closures or [])): closed.append({"entity_type":"room","entity_id":r.id,"message":"Assignment occurs during a room closure."})
         if not set(e.required_equipment or []).issubset(set(r.equipment or [])): equip.append({"entity_type":"exam","entity_id":e.id,"message":"Required equipment is missing."})
         for sid in enrol.get(e.id,set()):
