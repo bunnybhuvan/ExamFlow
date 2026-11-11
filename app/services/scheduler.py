@@ -94,13 +94,23 @@ def generate_dataset(db: Session, p):
                 room.closures = [{"start": closed_day.isoformat(), "end": closed_day.isoformat(), "reason":"Controlled closure test"}]
             target.window_start = closed_day
             target.window_end = closed_day
+            rows = db.query(Enrollment).filter_by(exam_id=target.id).order_by(Enrollment.student_id).all()
+            for row in rows[80:]:
+                db.delete(row)
+            target.enrollment = db.query(Enrollment).filter_by(exam_id=target.id).count()
             labels.append(EdgeCaseLabel(id="EDGE-ROOM-CLOSED", case_code="EXAM_IN_CLOSED_ROOMS",
                 entity_type="exam", entity_id=target.id, expected_detection="All rooms are closed during the exam's only permitted date."))
         if students and rooms and exams:
             students[0].accommodations = ["accessible_seating"]
             accommodation_exam = exams[4] if len(exams) > 4 else exams[0]
+            for ex in exams:
+                if ex.id != accommodation_exam.id:
+                    db.query(Enrollment).filter_by(student_id=students[0].id, exam_id=ex.id).delete(synchronize_session=False)
             if not db.query(Enrollment).filter_by(student_id=students[0].id, exam_id=accommodation_exam.id).first():
                 db.add(Enrollment(student_id=students[0].id, exam_id=accommodation_exam.id))
+            rows = db.query(Enrollment).filter_by(exam_id=accommodation_exam.id).order_by(Enrollment.student_id).all()
+            for row in rows[80:]:
+                db.delete(row)
             accommodation_exam.enrollment = db.query(Enrollment).filter_by(exam_id=accommodation_exam.id).count()
             for room in rooms:
                 room.accessible = False
@@ -112,6 +122,7 @@ def generate_dataset(db: Session, p):
             for ex in exams[2:4]:
                 ex.window_start = date.fromisoformat(constrained_day)
                 ex.window_end = date.fromisoformat(constrained_day)
+                ex.required_equipment = []
             for inv in invigilators:
                 inv.available_days = [d for d in (inv.available_days or []) if d != constrained_day]
             invigilators[0].available_days = sorted(set((invigilators[0].available_days or []) + [constrained_day]))
