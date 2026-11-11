@@ -94,16 +94,32 @@ def generate_dataset(db: Session, p):
             target.window_end = closed_day
             labels.append(EdgeCaseLabel(id="EDGE-ROOM-CLOSED", case_code="EXAM_IN_CLOSED_ROOMS",
                 entity_type="exam", entity_id=target.id, expected_detection="All rooms are closed during the exam's only permitted date."))
-        if students and rooms:
+        if students and rooms and exams:
             students[0].accommodations = ["accessible_seating"]
+            accommodation_exam = exams[4] if len(exams) > 4 else exams[0]
+            if not db.query(Enrollment).filter_by(student_id=students[0].id, exam_id=accommodation_exam.id).first():
+                db.add(Enrollment(student_id=students[0].id, exam_id=accommodation_exam.id))
+            accommodation_exam.enrollment = db.query(Enrollment).filter_by(exam_id=accommodation_exam.id).count()
             for room in rooms:
                 room.accessible = False
             labels.append(EdgeCaseLabel(id="EDGE-ACCOMMODATION", case_code="ACCOMMODATION_UNAVAILABLE",
                 entity_type="student", entity_id=students[0].id, expected_detection="Accessible seating is unavailable; affected exam must remain unassigned."))
-        if len(exams) >= 2 and invigilators:
+        if len(exams) >= 4 and invigilators:
+            # Only one invigilator is available on this one-day window for two distinct exams.
+            constrained_day = days[-1].isoformat()
+            for ex in exams[2:4]:
+                ex.window_start = date.fromisoformat(constrained_day)
+                ex.window_end = date.fromisoformat(constrained_day)
+            for inv in invigilators:
+                inv.available_days = [d for d in (inv.available_days or []) if d != constrained_day]
+            invigilators[0].available_days = sorted(set((invigilators[0].available_days or []) + [constrained_day]))
+            shared = set(x.student_id for x in db.query(Enrollment).filter_by(exam_id=exams[2].id).all()) & set(x.student_id for x in db.query(Enrollment).filter_by(exam_id=exams[3].id).all())
+            for sid in shared:
+                db.query(Enrollment).filter_by(student_id=sid, exam_id=exams[3].id).delete(synchronize_session=False)
+            exams[3].enrollment = db.query(Enrollment).filter_by(exam_id=exams[3].id).count()
             labels.append(EdgeCaseLabel(id="EDGE-INVIGILATOR-DOUBLE", case_code="INVIGILATOR_DOUBLE_BOOKING",
-                entity_type="exam_pair", entity_id=f"{exams[0].id},{exams[1].id}",
-                expected_detection="The scheduler must never assign one invigilator to overlapping exams."))
+                entity_type="exam_pair", entity_id=f"{exams[2].id},{exams[3].id}",
+                expected_detection="Only one invigilator is available for two same-day exams; the solver must leave one unassigned rather than double-book staff."))
     db.commit()
     add_event(db, "dataset.generated", "dataset", "current",
         f"Generated {len(students)} students, {len(exams)} exams, {len(rooms)} rooms and {len(invigilators)} invigilators (seed {p.seed}).",
@@ -281,17 +297,20 @@ def validation_report(db: Session):
     rooms={x.id:x for x in db.query(Room).all()}; invs={x.id:x for x in db.query(Invigilator).all()}
     enrol={e.id:set() for e in exams}
     for row in db.query(Enrollment).all(): enrol.setdefault(row.exam_id,set()).add(row.student_id)
+    students={x.id:x for x in db.query(Student).all()}
     student_schedule={}; room_schedule={}; inv_schedule={}
     checks=[]
     def add(name,category,violations,description,severity="high",details=None):
         checks.append({"id":name.lower().replace(" ","-"),"name":name,"category":category,
             "status":"fail" if violations else "pass","violations":violations,"severity":severity,
             "description":description,"details":details or []})
-    cap=[]; closed=[]; equip=[]; room_conf=[]; student_conf=[]; inv_conf=[]; accom=[]
+    cap=[]; closed=[]; equip=[]; room_conf=[]; student_conf=[]; inv_conf=[]; accom=[]; inv_avail=[]
     for a in assignments:
         e=exams[a["exam_id"]]; r=rooms[a["room_id"]]
         start=datetime.fromisoformat(a["start"]); end=datetime.fromisoformat(a["end"]); day=start.date().isoformat()
         if r.capacity<e.enrollment: cap.append({"entity_type":"exam","entity_id":e.id,"message":"Room capacity is below exam enrollment."})
+        if not r.accessible and any(any(k in (students[sid].accommodations or []) for k in ["accessible_seating","wheelchair"]) for sid in enrol.get(e.id,set()) if sid in students):
+            accom.append({"entity_type":"exam","entity_id":e.id,"message":"An enrolled student requires accessible seating but the assigned room is not accessible."})
         if any(c.get("start","")<=day<=c.get("end","") for c in (r.closures or [])): closed.append({"entity_type":"room","entity_id":r.id,"message":"Assignment occurs during a room closure."})
         if not set(e.required_equipment or []).issubset(set(r.equipment or [])): equip.append({"entity_type":"exam","entity_id":e.id,"message":"Required equipment is missing."})
         for sid in enrol.get(e.id,set()):
@@ -302,6 +321,8 @@ def validation_report(db: Session):
             if _overlap(start,end,prev[0],prev[1]): room_conf.append({"entity_type":"room","entity_id":r.id,"message":"Room has overlapping assignments."})
         room_schedule.setdefault(r.id,[]).append((start,end))
         for vid in a["invigilator_ids"]:
+            if vid in invs and day not in (invs[vid].available_days or []):
+                inv_avail.append({"entity_type":"invigilator","entity_id":vid,"message":"Invigilator is assigned on a day they are not available."})
             for prev in inv_schedule.get(vid,[]):
                 if _overlap(start,end,prev[0],prev[1]): inv_conf.append({"entity_type":"invigilator","entity_id":vid,"message":"Invigilator is double-booked."})
             inv_schedule.setdefault(vid,[]).append((start,end))
@@ -311,6 +332,8 @@ def validation_report(db: Session):
     add("No invigilator double booking","hard",len(inv_conf),"An invigilator cannot supervise overlapping exams.","critical",inv_conf)
     add("Room closures honoured","hard",len(closed),"Rooms must not be used during declared closures.","high",closed)
     add("Required equipment available","hard",len(equip),"Assigned rooms must contain all required equipment.","high",equip)
+    add("Accessibility accommodations respected","hard",len(accom),"Students with accessibility accommodations must be assigned to accessible rooms.","high",accom)
+    add("Invigilator availability respected","hard",len(inv_avail),"Invigilators must only be assigned on available days.","high",inv_avail)
     report={"generated_at":datetime.utcnow().isoformat()+"Z","passed":sum(c["status"]=="pass" for c in checks),
         "failed":sum(c["status"]=="fail" for c in checks),"warnings":0,"checks":checks}
     return report
