@@ -42,7 +42,7 @@ The independent validation endpoint re-checks accepted assignments for capacity,
 Reason selection is deterministic and based on the failed candidate checks.
 
 ## Complexity
-Let E be exams, S candidate time slots per exam, R rooms, I invigilators, and C the enrolled cohort size. A conservative upper bound for candidate evaluation is approximately O(E × S × (R + I + C)); practical execution usually exits early when a suitable room and invigilator are found. Enrollment and entity lookups are pre-indexed in memory for a schedule run.
+Let E be exams, S candidate time slots per exam, R rooms, I invigilators, and C the enrolled cohort size. A conservative upper bound for candidate evaluation is approximately O(E × S × R × (I + C)); practical execution usually exits early when a suitable room and invigilator are found. Enrollment and entity lookups are pre-indexed in memory for a schedule run.
 
 ## Edge-case labels
 When include_edge_cases=true, the generator creates labelled scenarios for shared student cohorts, insufficient capacity, closed rooms, unavailable accessibility, and invigilator scarcity. Labels are stored in edge_case_labels. The scheduling function never queries that table; it only reads operational input tables. This prevents ground-truth leakage.
