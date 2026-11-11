@@ -143,6 +143,7 @@ export interface GenerateScheduleResult {
 }
 
 export interface GenerateDatasetParams {
+  include_edge_cases: boolean;
   students: number;
   exams: number;
   rooms: number;
