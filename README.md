@@ -27,6 +27,10 @@ ExamFlow is a full-stack university examination scheduling system. It combines a
 
 ## Run locally
 
+### Windows one-click start
+
+Double-click `start_examflow.bat`. It creates the Python virtual environment if missing, installs dependencies when needed, starts FastAPI in a separate terminal, and runs the frontend. Install Python 3.10+ and Node.js 20+ first.
+
 ### 1. Backend
 
 From the repository root:
@@ -80,7 +84,7 @@ For evaluation scenarios, set `include_edge_cases` to `true`. This creates separ
 
 The engine is deterministic for a given dataset and request. It sorts exams by constraint difficulty (accessibility, equipment, enrollment and duration), then evaluates weekday time slots and suitable rooms. A candidate is accepted only when capacity, room availability, equipment, student rest/conflict checks, invigilator availability and workload limits pass. The engine assigns one room per exam; splitting a single exam across multiple rooms is intentionally outside this version's scope.
 
-Unassigned exams retain explicit reason codes such as `NO_ROOM_CAPACITY`, `ROOM_CLOSED`, `EQUIPMENT_UNAVAILABLE`, `STUDENT_CONFLICT`, `NO_INVIGILATOR`, `ACCOMMODATION_CONFLICT` and `NO_VALID_TIME_SLOT`.
+Unassigned exams retain explicit reason codes such as `NO_ROOM_CAPACITY`, `ROOM_CLOSED`, `EQUIPMENT_UNAVAILABLE`, `STUDENT_CONFLICT`, `NO_INVIGILATOR`, `ACCOMMODATION_CONFLICT`, `UNSUPPORTED_ACCOMMODATION` and `NO_VALID_TIME_SLOT`.
 
 ## API
 
@@ -111,6 +115,14 @@ All routes are prefixed with `/api/v1`.
 ```bash
 pytest
 ```
+
+Frontend tests: `npm test`.
+
+## Project documentation
+
+- `docs/ALGORITHM.md` — hard constraints, strategies, reason codes and complexity.
+- `docs/AI_USAGE.md` — transparent AI tool and prompt record.
+- `docs/DEMO.md` — suggested five-minute challenge demonstration.
 
 ## Data and reproducibility
 
