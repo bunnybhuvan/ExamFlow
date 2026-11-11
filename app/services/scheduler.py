@@ -115,10 +115,17 @@ def generate_dataset(db: Session, p):
             for inv in invigilators:
                 inv.available_days = [d for d in (inv.available_days or []) if d != constrained_day]
             invigilators[0].available_days = sorted(set((invigilators[0].available_days or []) + [constrained_day]))
+            invigilators[0].max_duties = max(invigilators[0].max_duties, 100)
             shared = set(x.student_id for x in db.query(Enrollment).filter_by(exam_id=exams[2].id).all()) & set(x.student_id for x in db.query(Enrollment).filter_by(exam_id=exams[3].id).all())
             for sid in shared:
                 db.query(Enrollment).filter_by(student_id=sid, exam_id=exams[3].id).delete(synchronize_session=False)
-            exams[3].enrollment = db.query(Enrollment).filter_by(exam_id=exams[3].id).count()
+            # Keep both test exams below the two-invigilator threshold so the single available
+            # invigilator can cover one, while the other must remain unassigned.
+            for ex in exams[2:4]:
+                rows = db.query(Enrollment).filter_by(exam_id=ex.id).order_by(Enrollment.student_id).all()
+                for row in rows[80:]:
+                    db.delete(row)
+                ex.enrollment = db.query(Enrollment).filter_by(exam_id=ex.id).count()
             labels.append(EdgeCaseLabel(id="EDGE-INVIGILATOR-DOUBLE", case_code="INVIGILATOR_DOUBLE_BOOKING",
                 entity_type="exam_pair", entity_id=f"{exams[2].id},{exams[3].id}",
                 expected_detection="Only one invigilator is available for two same-day exams; the solver must leave one unassigned rather than double-book staff."))
