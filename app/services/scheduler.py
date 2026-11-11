@@ -69,8 +69,10 @@ def generate_dataset(db: Session, p):
         if len(exams) >= 2 and len(students) >= 3:
             # Controlled shared cohort: the solver must place these exams in non-overlapping slots.
             for sid in [students[0].id, students[1].id, students[2].id]:
-                db.add(Enrollment(student_id=sid, exam_id=exams[0].id))
-                db.add(Enrollment(student_id=sid, exam_id=exams[1].id))
+                if not db.query(Enrollment).filter_by(student_id=sid, exam_id=exams[0].id).first():
+                    db.add(Enrollment(student_id=sid, exam_id=exams[0].id))
+                if not db.query(Enrollment).filter_by(student_id=sid, exam_id=exams[1].id).first():
+                    db.add(Enrollment(student_id=sid, exam_id=exams[1].id))
             exams[0].enrollment = db.query(Enrollment).filter_by(exam_id=exams[0].id).count()
             exams[1].enrollment = db.query(Enrollment).filter_by(exam_id=exams[1].id).count()
             labels.append(EdgeCaseLabel(id="EDGE-STUDENT-OVERLAP", case_code="STUDENT_OVERLAP",
