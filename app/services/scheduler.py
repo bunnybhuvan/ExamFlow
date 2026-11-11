@@ -125,7 +125,7 @@ def generate_dataset(db: Session, p):
                 ex.required_equipment = []
             for inv in invigilators:
                 inv.available_days = [d for d in (inv.available_days or []) if d != constrained_day]
-            invigilators[0].available_days = sorted(set((invigilators[0].available_days or []) + [constrained_day]))
+            invigilators[0].available_days = [constrained_day]
             invigilators[0].max_duties = max(invigilators[0].max_duties, 100)
             shared = set(x.student_id for x in db.query(Enrollment).filter_by(exam_id=exams[2].id).all()) & set(x.student_id for x in db.query(Enrollment).filter_by(exam_id=exams[3].id).all())
             for sid in shared:
