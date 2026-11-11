@@ -177,6 +177,7 @@ def generate_schedule(db: Session, p):
     student_by_id = {s.id:s for s in students}
     inv_by_id = {v.id:v for v in invigilators}
     room_assignments, inv_assignments, student_assignments = {}, {}, {}
+    day_load, student_day_load = {}, {}
     day_start, day_end = _parse_time(p.daily_start), _parse_time(p.daily_end)
     offsets = [0, 210, 360]
     slots = []
@@ -200,6 +201,13 @@ def generate_schedule(db: Session, p):
         eligible_students = enrollment_map.get(ex.id, [])
         needs_access = any(any(k in (student_by_id[sid].accommodations or []) for k in ["accessible_seating","wheelchair"]) for sid in eligible_students if sid in student_by_id)
         candidate_dates = [s for s in slots if ex.window_start <= s.date() <= ex.window_end]
+        if p.strategy == "balanced":
+            candidate_dates.sort(key=lambda slot:(day_load.get(slot.date().isoformat(),0),slot))
+        elif p.strategy == "spread":
+            candidate_dates.sort(key=lambda slot:(sum(student_day_load.get((sid,slot.date().isoformat()),0) for sid in eligible_students),
+                day_load.get(slot.date().isoformat(),0),slot))
+        else:  # compact: fill the earliest feasible days first
+            candidate_dates.sort()
         if not candidate_dates:
             unassigned.append((ex,"NO_VALID_TIME_SLOT","No weekday time slot falls inside the exam scheduling window."))
             ex.status="unassigned"; continue
@@ -260,7 +268,11 @@ def generate_schedule(db: Session, p):
             invigilator_ids=[v.id for v in selected],start=start_dt,end=end_dt,status="confirmed")
         db.add(assignment); assigned.append(assignment)
         room_assignments.setdefault(room.id,[]).append((start_dt,end_dt))
-        for sid in eligible_students: student_assignments.setdefault(sid,[]).append((start_dt,end_dt))
+        day_key=start_dt.date().isoformat()
+        day_load[day_key]=day_load.get(day_key,0)+1
+        for sid in eligible_students:
+            student_assignments.setdefault(sid,[]).append((start_dt,end_dt))
+            student_day_load[(sid,day_key)]=student_day_load.get((sid,day_key),0)+1
         for v in selected:
             inv_assignments.setdefault(v.id,[]).append((start_dt,end_dt)); v.assigned_duties+=1
         ex.status="scheduled"
