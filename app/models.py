@@ -57,7 +57,8 @@ class Invigilator(Base):
 class Assignment(Base):
     __tablename__ = "assignments"
     id: Mapped[str] = mapped_column(String(160), primary_key=True)
-    exam_id: Mapped[str] = mapped_column(ForeignKey("exams.id", ondelete="CASCADE"), unique=True, nullable=False)
+    exam_id: Mapped[str] = mapped_column(ForeignKey("exams.id", ondelete="CASCADE"), nullable=False, index=True)
+    student_ids: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     room_id: Mapped[str] = mapped_column(ForeignKey("rooms.id"), nullable=False)
     invigilator_ids: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     start: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
