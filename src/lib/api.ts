@@ -172,6 +172,9 @@ export const api = {
     try {
       res = await fetch(`${API_BASE_URL}/exports/${format}`, {
         signal: AbortSignal.timeout(30000),
+        headers: typeof window !== "undefined" && localStorage.getItem("examflow_access_token")
+          ? { Authorization: `Bearer ${localStorage.getItem("examflow_access_token")}` }
+          : {},
       });
     } catch {
       throw new ApiError(`Cannot reach API at ${API_BASE_URL}`, null);
