@@ -143,6 +143,7 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const [authState, setAuthState] = useState<"loading" | "disabled" | "login" | "authenticated">("loading");
+  const [authUser, setAuthUser] = useState<{ id: string; email: string; role: string } | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
@@ -155,7 +156,7 @@ function RootComponent() {
       if (!config.enabled) { setAuthState("disabled"); return; }
       try {
         const user = await api.me();
-        if (active) { setAuthState("authenticated"); }
+        if (active) { setAuthUser(user); setAuthState("authenticated"); }
       } catch {
         if (active) setAuthState("login");
       }
@@ -170,7 +171,8 @@ function RootComponent() {
     setSubmitting(true);
     setAuthError("");
     try {
-      await api.login(email, password);
+      const user = await api.login(email, password);
+      setAuthUser(user);
       setAuthState("authenticated");
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Unable to sign in.");
@@ -201,6 +203,10 @@ function RootComponent() {
               <div className="flex min-h-screen w-full">
                 <AppSidebar />
                 <SidebarInset className="min-w-0 bg-transparent">
+                  <div className="flex items-center justify-end gap-3 border-b border-border/60 px-4 py-2 text-xs text-muted-foreground">
+                    {authUser && <span>{authUser.email} · {authUser.role}</span>}
+                    {authState === "authenticated" && <button onClick={() => { api.logout(); setAuthUser(null); setAuthState("login"); }} className="rounded-md border border-border px-3 py-1.5 font-medium text-foreground hover:bg-accent">Sign out</button>}
+                  </div>
                   <TopBar />
                   <DemoBanner />
                   <main className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-6 md:px-6 lg:px-8">
