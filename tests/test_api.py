@@ -451,7 +451,7 @@ def test_dataset_bundle_contains_normalized_tables_manifest_and_ground_truth(cli
         assert manifest["generator_command"]["payload"]["students"] == 120
         assert manifest["generator_command"]["payload"]["include_edge_cases"] is True
         assert manifest["tables"]["students"]["rows"] == 120
-        assert "\\n" in archive.read("README.txt").decode("utf-8")
+        assert "\n" in archive.read("README.txt").decode("utf-8")
         assert manifest["tables"]["edge_case_labels"]["rows"] >= 5
         assert manifest["ground_truth_separation"].startswith("edge_case_labels")
 
