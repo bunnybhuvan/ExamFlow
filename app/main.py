@@ -19,6 +19,10 @@ from .services.scheduler import (generate_dataset, generate_schedule, assignment
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    if engine.dialect.name == "postgresql":
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE assignments ADD COLUMN IF NOT EXISTS student_ids JSON NOT NULL DEFAULT '[]'::json"))
+            connection.execute(text("ALTER TABLE assignments DROP CONSTRAINT IF EXISTS assignments_exam_id_key"))
     if auth_enabled():
         secret = os.getenv("EXAMFLOW_AUTH_SECRET", "")
         email = os.getenv("EXAMFLOW_ADMIN_EMAIL", "").strip().lower()
