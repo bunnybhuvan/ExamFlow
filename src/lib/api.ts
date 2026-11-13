@@ -63,6 +63,7 @@ async function request<T>(
     res = await fetch(`${API_BASE_URL}${path}`, {
       ...rest,
       signal: ctrl.signal,
+      cache: "no-store",
       headers: {
         Accept: "application/json",
         ...(typeof window !== "undefined" &&
@@ -85,6 +86,9 @@ async function request<T>(
     clearTimeout(timer);
   }
   if (!res.ok) {
+    if (res.status === 401 && typeof window !== "undefined") {
+      window.dispatchEvent(new Event("examflow:unauthorized"));
+    }
     let body: unknown;
     try {
       body = await res.json();
@@ -186,6 +190,7 @@ export const api = {
     try {
       res = await fetch(`${API_BASE_URL}/exports/${format}`, {
         signal: AbortSignal.timeout(30000),
+        cache: "no-store",
         headers:
           typeof window !== "undefined" && localStorage.getItem("examflow_access_token")
             ? { Authorization: `Bearer ${localStorage.getItem("examflow_access_token")}` }
@@ -194,7 +199,12 @@ export const api = {
     } catch {
       throw new ApiError(`Cannot reach API at ${API_BASE_URL}`, null);
     }
-    if (!res.ok) throw new ApiError(`${res.status} ${res.statusText}`, res.status);
+    if (!res.ok) {
+      if (res.status === 401 && typeof window !== "undefined") {
+        window.dispatchEvent(new Event("examflow:unauthorized"));
+      }
+      throw new ApiError(`${res.status} ${res.statusText}`, res.status);
+    }
     const cd = res.headers.get("content-disposition") ?? "";
     const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
     let filename = match?.[1] ?? `examflow-schedule.${format}`;
