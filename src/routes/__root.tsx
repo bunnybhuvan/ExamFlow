@@ -170,7 +170,7 @@ function RootComponent() {
     setSubmitting(true);
     setAuthError("");
     try {
-      const user = await api.login(email, password);
+      await api.login(email, password);
       setAuthState("authenticated");
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Unable to sign in.");
