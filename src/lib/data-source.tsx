@@ -87,6 +87,11 @@ export function useExportSchedule() {
     mutationFn: async (format: ExportFormat) => {
       assertReady(mode);
       if (mode === "api") return { ...(await api.exportFile(format)), demo: false };
+      if (format === "sql") {
+        throw new Error(
+          "SQL database export requires a connected backend. Switch from Demo Mode to API Mode.",
+        );
+      }
       const rows = demo.current.schedules;
       const body =
         format === "csv"
