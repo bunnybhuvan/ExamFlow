@@ -226,9 +226,96 @@ def generate_schedule(db: Session, p):
             if sid in student_by_id:
                 accommodation_tags.update(str(tag).strip().lower().replace(" ", "_").replace("%", "")
                     for tag in (student_by_id[sid].accommodations or []))
-        if "separate_room" in accommodation_tags:
-            unassigned.append((ex,"UNSUPPORTED_ACCOMMODATION","Separate-room accommodation requires multi-room exam splitting, which this version does not support."))
-            ex.status="unassigned"; continue
+        separate_ids = [sid for sid in eligible_students if
+            "separate_room" in accommodation_tags or
+            bool({str(tag).strip().lower().replace(" ", "_").replace("-", "_")
+                  for tag in (student_by_id[sid].accommodations or [])} & {"separate_room", "individual_room"})]
+        if separate_ids:
+            regular_ids = [sid for sid in eligible_students if sid not in set(separate_ids)]
+            duration = math.ceil(ex.duration_minutes * 1.25) if accommodation_tags & {"extra_time_25", "extra_time", "25_extra_time"} else ex.duration_minutes
+            equipment = set(ex.required_equipment or [])
+            if "screen_reader" in accommodation_tags:
+                equipment.add("Computers")
+            exam_slots = [slot for slot in slots if ex.window_start <= slot.date() <= ex.window_end]
+            exam_slots.sort(key=lambda slot: (day_load.get(slot.date().isoformat(), 0), slot))
+            selected_plan = None
+            for start_dt in exam_slots:
+                end_dt = start_dt + timedelta(minutes=duration)
+                if end_dt.time() > day_end:
+                    continue
+                day_key = start_dt.date().isoformat()
+                if any(any(_overlap(start_dt,end_dt,x,y,p.break_buffer_minutes) for x,y in student_assignments.get(sid,[])) for sid in eligible_students):
+                    continue
+                free_rooms = [room for room in sorted(rooms,key=lambda room:(room.capacity,room.id))
+                    if equipment.issubset(set(room.equipment or []))
+                    and not any(cl.get("start","") <= day_key <= cl.get("end","") for cl in (room.closures or []))
+                    and not any(_overlap(start_dt,end_dt,x,y) for x,y in room_assignments.get(room.id,[]))]
+                groups = []
+                used_rooms = set()
+                valid = True
+                for sid in sorted(separate_ids):
+                    tags = {str(tag).strip().lower().replace(" ", "_").replace("-", "_") for tag in (student_by_id[sid].accommodations or [])}
+                    accessible = bool(tags & {"accessible_seating","wheelchair","accessible"})
+                    choices = [room for room in free_rooms if room.id not in used_rooms and (not accessible or room.accessible)]
+                    if not choices:
+                        valid = False
+                        break
+                    room = choices[0]
+                    groups.append((room,[sid]))
+                    used_rooms.add(room.id)
+                if valid and regular_ids:
+                    accessible = any(
+                        {str(tag).strip().lower().replace(" ", "_").replace("-", "_") for tag in (student_by_id[sid].accommodations or [])}
+                        & {"accessible_seating","wheelchair","accessible"} for sid in regular_ids)
+                    choices = [room for room in free_rooms if room.id not in used_rooms
+                        and room.capacity >= len(regular_ids) and (not accessible or room.accessible)]
+                    if choices:
+                        groups.append((choices[0],regular_ids))
+                        used_rooms.add(choices[0].id)
+                    else:
+                        valid = False
+                if not valid or not groups:
+                    continue
+                used_staff = set()
+                staffed = []
+                for room, cohort in groups:
+                    needed = 2 if len(cohort) >= 150 else 1
+                    staff = [person for person in invigilators if person.id not in used_staff
+                        and day_key in (person.available_days or [])
+                        and person.assigned_duties < person.max_duties
+                        and not any(_overlap(start_dt,end_dt,x,y) for x,y in inv_assignments.get(person.id,[]))]
+                    staff.sort(key=lambda person:(person.assigned_duties,person.id))
+                    if len(staff) < needed:
+                        valid = False
+                        break
+                    selected_staff = staff[:needed]
+                    used_staff.update(person.id for person in selected_staff)
+                    staffed.append((room,cohort,selected_staff))
+                if valid:
+                    selected_plan = (start_dt,end_dt,staffed)
+                    break
+            if not selected_plan:
+                unassigned.append((ex,"ACCOMMODATION_CONFLICT",
+                    "Separate-room accommodation could not be satisfied with the available dedicated rooms, accessible facilities and invigilators."))
+                ex.status="unassigned"
+                continue
+            start_dt,end_dt,staffed = selected_plan
+            for room,cohort,staff in staffed:
+                db.add(Assignment(id=f"ASN-{ex.id}-{room.id}",exam_id=ex.id,room_id=room.id,
+                    student_ids=cohort,invigilator_ids=[person.id for person in staff],
+                    start=start_dt,end=end_dt,status="confirmed"))
+                room_assignments.setdefault(room.id,[]).append((start_dt,end_dt))
+                for sid in cohort:
+                    student_assignments.setdefault(sid,[]).append((start_dt,end_dt))
+                    student_day_load[(sid,start_dt.date().isoformat())]=student_day_load.get((sid,start_dt.date().isoformat()),0)+1
+                for person in staff:
+                    inv_assignments.setdefault(person.id,[]).append((start_dt,end_dt))
+                    person.assigned_duties += 1
+            day_key=start_dt.date().isoformat()
+            day_load[day_key]=day_load.get(day_key,0)+1
+            ex.status="scheduled"
+            assigned.append(ex)
+            continue
         needs_access = bool(accommodation_tags & {"accessible_seating","wheelchair","accessible"})
         needs_extra_time = bool(accommodation_tags & {"extra_time_25","extra_time","25_extra_time"})
         needs_screen_reader = "screen_reader" in accommodation_tags
