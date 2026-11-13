@@ -161,12 +161,12 @@ def exports(file_format: str, db: Session=Depends(get_db)):
             # SQLite's dump emits schema and data in table-name order. Disable FK
             # enforcement for the import transaction, then restore it at the end.
             sqlite_connection = raw_connection.driver_connection
-            dump = "\\n".join(sqlite_connection.iterdump())
+            dump = "\n".join(sqlite_connection.iterdump())
             sql_script = (
-                "-- ExamFlow database export; generated from the active database.\\n"
-                "PRAGMA foreign_keys=OFF;\\n"
+                "-- ExamFlow database export; generated from the active database.\n"
+                "PRAGMA foreign_keys=OFF;\n"
                 + dump
-                + "\\nPRAGMA foreign_keys=ON;\\n"
+                + "\nPRAGMA foreign_keys=ON;\n"
             )
         finally:
             raw_connection.close()
