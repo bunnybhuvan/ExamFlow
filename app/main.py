@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
-import csv, io, json
+import csv, io, json, os
 from fastapi import FastAPI, Depends, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -17,7 +17,25 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(title="ExamFlow API", description="Deterministic examination scheduling and validation service.", version="1.0.0", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:8080","http://localhost:5173","http://127.0.0.1:8080","http://127.0.0.1:5173"], allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
+def configured_cors_origins():
+    configured = os.getenv("EXAMFLOW_CORS_ORIGINS")
+    if configured is None:
+        return [
+            "http://localhost:8080",
+            "http://localhost:5173",
+            "http://127.0.0.1:8080",
+            "http://127.0.0.1:5173",
+        ]
+    return [origin.strip().rstrip("/") for origin in configured.split(",") if origin.strip()]
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=configured_cors_origins(),
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/api/v1/health")
 def health():
@@ -27,7 +45,7 @@ def health():
 def health_database(db: Session=Depends(get_db)):
     try:
         db.execute(text("SELECT 1"))
-        return {"status":"connected","database":"sqlite"}
+        return {"status":"connected","database":engine.dialect.name}
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Database unavailable: {exc}")
 
