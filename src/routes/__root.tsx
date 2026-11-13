@@ -157,6 +157,13 @@ function RootComponent() {
 
   useEffect(() => {
     let active = true;
+    const handleUnauthorized = () => {
+      api.logout();
+      queryClient.clear();
+      setAuthUser(null);
+      setAuthState("login");
+    };
+    window.addEventListener("examflow:unauthorized", handleUnauthorized);
     api
       .authConfig()
       .then(async (config) => {
@@ -180,8 +187,9 @@ function RootComponent() {
       });
     return () => {
       active = false;
+      window.removeEventListener("examflow:unauthorized", handleUnauthorized);
     };
-  }, []);
+  }, [queryClient]);
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -191,6 +199,7 @@ function RootComponent() {
       const user = await api.login(email, password);
       setAuthUser(user);
       setAuthState("authenticated");
+      await queryClient.invalidateQueries();
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Unable to sign in.");
     } finally {
