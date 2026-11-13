@@ -7,13 +7,13 @@
 - **Database:** Neon PostgreSQL free plan, configured separately from the API.
 - **Source and CI:** GitHub.
 
-No paid Render service, persistent disk, or paid database is part of this setup. Free plans have provider-defined quotas and limitations that can change. Render free web services can spin down after inactivity, so the first request after an idle period may be slow. The service filesystem is ephemeral; **do not use SQLite for hosted production data**. Configure PostgreSQL before using the hosted app.
+No paid Render service, persistent disk, or paid database is part of this setup. This architecture is for a challenge/portfolio demonstration, not a production university deployment: Render explicitly positions its free instances for testing and hobby projects. The API sleeps after 15 minutes without traffic, and waking it can take about a minute. Its filesystem is ephemeral, so **do not use SQLite for hosted data**. Configure PostgreSQL before using the hosted app. [Render free-plan limits](https://render.com/docs/free).
 
 ## 1. Create the free PostgreSQL database
 
 1. Create a project on Neon and select its free plan.
 2. Create or use the default database and copy its connection string.
-3. Keep the connection string private. Do not commit it, put it in frontend variables, or send it in chat.
+3. Keep the connection string private. Do not commit it, put it in frontend variables, or send it in chat. Neon Free currently includes 100 compute-hours and 1 GB storage per project monthly; when compute or transfer limits are reached, compute is suspended rather than billed for Free-plan overages. [Neon Free-plan quotas](https://neon.com/docs/introduction/free-plan).
 
 ## 2. Deploy the API on Render
 
@@ -21,7 +21,7 @@ No paid Render service, persistent disk, or paid database is part of this setup.
 2. Create a Blueprint deployment from `render.yaml` and select the free web-service plan.
 3. When prompted for `DATABASE_URL`, paste the Neon connection string into Render's secret environment-variable field. Keep this value private.
 4. Set `EXAMFLOW_CORS_ORIGINS` to the exact comma-separated frontend origins that will call the API. Include the published Lovable app origin and any preview origin you actually use. Do not use `*` for production.
-5. Deploy and verify `/api/v1/health` and `/api/v1/health/database` on the Render service URL.
+5. Do not add a payment method for this free-only deployment. Render documents that over-limit bandwidth/build usage can be billed when a payment method is on file; without one, the service/builds are suspended instead. If a payment method is already attached to the workspace, set a zero/strict spend limit before proceeding. Deploy and verify `/api/v1/health` and `/api/v1/health/database` on the Render service URL.
 
 The database health response should report `"database":"postgresql"`. If it reports SQLite, stop and correct `DATABASE_URL` before generating real data.
 
