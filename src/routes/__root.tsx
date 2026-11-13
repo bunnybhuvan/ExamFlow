@@ -142,8 +142,14 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  const [authState, setAuthState] = useState<"loading" | "disabled" | "login" | "authenticated">("loading");
-  const [authUser, setAuthUser] = useState<{ id: string; email: string; role: string } | null>(null);
+  const [authState, setAuthState] = useState<
+    "loading" | "disabled" | "login" | "authenticated"
+  >("loading");
+  const [authUser, setAuthUser] = useState<{
+    id: string;
+    email: string;
+    role: string;
+  } | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
@@ -151,19 +157,30 @@ function RootComponent() {
 
   useEffect(() => {
     let active = true;
-    api.authConfig().then(async (config) => {
-      if (!active) return;
-      if (!config.enabled) { setAuthState("disabled"); return; }
-      try {
-        const user = await api.me();
-        if (active) { setAuthUser(user); setAuthState("authenticated"); }
-      } catch {
+    api
+      .authConfig()
+      .then(async (config) => {
+        if (!active) return;
+        if (!config.enabled) {
+          setAuthState("disabled");
+          return;
+        }
+        try {
+          const user = await api.me();
+          if (active) {
+            setAuthUser(user);
+            setAuthState("authenticated");
+          }
+        } catch {
+          if (active) setAuthState("login");
+        }
+      })
+      .catch(() => {
         if (active) setAuthState("login");
-      }
-    }).catch(() => {
-      if (active) setAuthState("login");
-    });
-    return () => { active = false; };
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
@@ -181,18 +198,67 @@ function RootComponent() {
     }
   }
 
-  if (authState === "loading") return <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">Loading ExamFlow…</div>;
-  if (authState === "login") return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <form onSubmit={submitLogin} className="w-full max-w-md space-y-5 rounded-2xl border border-border bg-card p-8 shadow-xl">
-        <div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">ExamFlow secure access</p><h1 className="mt-2 text-3xl font-bold text-foreground">Sign in</h1><p className="mt-2 text-sm text-muted-foreground">Use your university operations account.</p></div>
-        <label className="block space-y-2 text-sm font-medium text-foreground">Email<input required type="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2" /></label>
-        <label className="block space-y-2 text-sm font-medium text-foreground">Password<input required type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2" /></label>
-        {authError && <p role="alert" className="text-sm text-destructive">{authError}</p>}
-        <button disabled={submitting} className="w-full rounded-md bg-primary px-4 py-2.5 font-semibold text-primary-foreground disabled:opacity-50">{submitting ? "Signing in…" : "Sign in securely"}</button>
-      </form>
-    </div>
-  );
+  if (authState === "loading") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
+        Loading ExamFlow…
+      </div>
+    );
+  }
+
+  if (authState === "login") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <form
+          onSubmit={submitLogin}
+          className="w-full max-w-md space-y-5 rounded-2xl border border-border bg-card p-8 shadow-xl"
+        >
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+              ExamFlow secure access
+            </p>
+            <h1 className="mt-2 text-3xl font-bold text-foreground">Sign in</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Use your university operations account.
+            </p>
+          </div>
+          <label className="block space-y-2 text-sm font-medium text-foreground">
+            Email
+            <input
+              required
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2"
+            />
+          </label>
+          <label className="block space-y-2 text-sm font-medium text-foreground">
+            Password
+            <input
+              required
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2"
+            />
+          </label>
+          {authError && (
+            <p role="alert" className="text-sm text-destructive">
+              {authError}
+            </p>
+          )}
+          <button
+            disabled={submitting}
+            className="w-full rounded-md bg-primary px-4 py-2.5 font-semibold text-primary-foreground disabled:opacity-50"
+          >
+            {submitting ? "Signing in…" : "Sign in securely"}
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -204,8 +270,23 @@ function RootComponent() {
                 <AppSidebar />
                 <SidebarInset className="min-w-0 bg-transparent">
                   <div className="flex items-center justify-end gap-3 border-b border-border/60 px-4 py-2 text-xs text-muted-foreground">
-                    {authUser && <span>{authUser.email} · {authUser.role}</span>}
-                    {authState === "authenticated" && <button onClick={() => { api.logout(); setAuthUser(null); setAuthState("login"); }} className="rounded-md border border-border px-3 py-1.5 font-medium text-foreground hover:bg-accent">Sign out</button>}
+                    {authUser && (
+                      <span>
+                        {authUser.email} · {authUser.role}
+                      </span>
+                    )}
+                    {authState === "authenticated" && (
+                      <button
+                        onClick={() => {
+                          api.logout();
+                          setAuthUser(null);
+                          setAuthState("login");
+                        }}
+                        className="rounded-md border border-border px-3 py-1.5 font-medium text-foreground hover:bg-accent"
+                      >
+                        Sign out
+                      </button>
+                    )}
                   </div>
                   <TopBar />
                   <DemoBanner />
