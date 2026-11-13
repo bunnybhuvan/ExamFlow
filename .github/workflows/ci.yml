@@ -39,8 +39,8 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_PASSWORD: postgres
           POSTGRES_DB: examflow_test
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
@@ -57,5 +57,5 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Restore a real PostgreSQL SQL export into an isolated schema
         env:
-          EXAMFLOW_TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/examflow_test
+          EXAMFLOW_TEST_POSTGRES_URL: postgresql://postgres@localhost:5432/examflow_test
         run: python scripts/test_postgres_backup_restore.py
