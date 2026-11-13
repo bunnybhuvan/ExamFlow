@@ -480,7 +480,7 @@ def validation_report(db: Session):
         if len(allocated_ids)>r.capacity: cap.append({"entity_type":"exam","entity_id":e.id,"message":"Assigned room capacity is below its allocated student count."})
         assigned_by_exam.setdefault(e.id,[]).extend(sorted(allocated_ids))
         exam_tags = {str(tag).strip().lower().replace(" ", "_").replace("-", "_") for tag in (e.accommodations or [])}
-        separate_required = "separate_room" in exam_tags or any("separate_room" in {str(tag).strip().lower().replace(" ", "_").replace("-", "_") for tag in (students[sid].accommodations or [])} for sid in allocated_ids if sid in students)
+        separate_required = bool(exam_tags & {"separate_room", "individual_room"}) or any(bool({"separate_room", "individual_room"} & {str(tag).strip().lower().replace(" ", "_").replace("-", "_") for tag in (students[sid].accommodations or [])}) for sid in allocated_ids if sid in students)
         if separate_required and len(allocated_ids) != 1:
             separate_room.append({"entity_type":"exam","entity_id":e.id,"message":"A student requiring a separate room shares a room with another student."})
         enrolled_accommodations = {str(tag).strip().lower().replace(" ", "_").replace("-", "_").replace("%", "")
