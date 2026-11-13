@@ -87,6 +87,11 @@ class PasswordChangeInput(BaseModel):
     new_password: str = Field(min_length=12, max_length=256)
 
 
+@app.get("/api/v1/auth/config")
+def auth_config():
+    return {"enabled": auth_enabled()}
+
+
 @app.post("/api/v1/auth/login")
 def auth_login(payload: LoginInput, db: Session = Depends(get_db)):
     user = db.query(models.User).filter_by(email=payload.email.strip().lower()).first()
