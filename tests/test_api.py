@@ -214,3 +214,35 @@ def test_postgresql_connection_url_normalization():
     assert normalize_database_url(
         "sqlite:///./data/test.db"
     ) == "sqlite:///./data/test.db"
+
+
+
+def test_separate_room_accommodation_allocates_student_to_private_room(client):
+    generated = client.post("/api/v1/datasets/generate", json={
+        "seed": 20261113, "students": 80, "exams": 8, "rooms": 12,
+        "invigilators": 16, "include_edge_cases": False,
+    })
+    assert generated.status_code == 200, generated.text
+    db = TestingSession()
+    try:
+        student = db.get(__import__("app.models", fromlist=["Student"]).Student, "STU-000001")
+        assert student is not None
+        student.accommodations = ["separate_room"]
+        db.commit()
+    finally:
+        db.close()
+
+    result = client.post("/api/v1/schedules/generate", json={
+        "start_date": "2026-12-07", "end_date": "2027-01-01",
+        "daily_start": "09:00", "daily_end": "18:00",
+        "break_buffer_minutes": 15, "seed": 20261113, "strategy": "balanced",
+    })
+    assert result.status_code == 200, result.text
+    rows = client.get("/api/v1/schedules").json()
+    private_rows = [row for row in rows if "STU-000001" in row["student_ids"]]
+    assert len(private_rows) == 1
+    assert private_rows[0]["enrolled"] == 1
+    report = client.get("/api/v1/reports/validation").json()
+    assert report["failed"] == 0, report
+    assert any(check["name"] == "Separate-room accommodations isolated" and check["status"] == "pass"
+               for check in report["checks"])
