@@ -40,3 +40,29 @@ Set `VITE_API_BASE_URL` in the Lovable project's environment settings to `https:
 - Keep demo mode visibly labelled; do not present demo fixtures as live backend data.
 
 A passing GitHub Actions run does not prove that provider credentials, CORS, the live API and the published frontend work together. Complete these live checks before calling deployment verified.
+
+
+## 5. Authentication and roles
+
+Set these Render environment variables before enabling protected access:
+
+- `EXAMFLOW_AUTH_ENABLED=true`
+- `EXAMFLOW_AUTH_SECRET`: a random secret of at least 32 characters
+- `EXAMFLOW_ADMIN_EMAIL`: initial administrator email
+- `EXAMFLOW_ADMIN_PASSWORD`: initial administrator password (12+ characters)
+
+The first startup creates the administrator account if it does not exist. Keep credentials in Render's secret environment settings; never commit them. Sign in through the ExamFlow web application. Access tokens expire after eight hours. Administrators can create `admin`, `scheduler` and `viewer` accounts through the authenticated `POST /api/v1/auth/users` endpoint. Viewers have read-only access and can change their own password. Health checks and the authentication configuration/login endpoints remain public.
+
+Role policy:
+- **admin:** full access and user administration.
+- **scheduler:** read access plus dataset, exam and schedule mutations.
+- **viewer:** read-only access plus own password rotation.
+
+## 6. Backup and recovery
+
+- Neon Free provides managed backups and point-in-time restore within the retention window shown in the Neon console. Confirm the current retention policy for the project before relying on it for an institutional recovery objective.
+- The authenticated `GET /api/v1/exports/sql` endpoint produces a portable SQL dump of the complete application schema and data.
+- Download SQL exports to a controlled, encrypted storage location; do not store student records in a public repository or public workflow artifact.
+- For recovery into a new PostgreSQL database, create an empty target database and apply the SQL export with `psql --set ON_ERROR_STOP=on --single-transaction --file examflow-database.sql "$DATABASE_URL"`.
+- Validate the restored database with `/api/v1/health/database`, the dashboard metrics endpoint and `/api/v1/reports/validation`. Compare record counts and verify a sample schedule before switching the application connection string.
+- The CI suite exercises SQL export restoration against an isolated test database. This is a technical restore test, not a substitute for periodic production disaster-recovery drills.
