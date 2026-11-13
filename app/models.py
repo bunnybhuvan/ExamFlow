@@ -57,7 +57,8 @@ class Invigilator(Base):
 class Assignment(Base):
     __tablename__ = "assignments"
     id: Mapped[str] = mapped_column(String(160), primary_key=True)
-    exam_id: Mapped[str] = mapped_column(ForeignKey("exams.id", ondelete="CASCADE"), unique=True, nullable=False)
+    exam_id: Mapped[str] = mapped_column(ForeignKey("exams.id", ondelete="CASCADE"), nullable=False, index=True)
+    student_ids: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     room_id: Mapped[str] = mapped_column(ForeignKey("rooms.id"), nullable=False)
     invigilator_ids: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     start: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
@@ -100,3 +101,13 @@ class EdgeCaseLabel(Base):
     entity_type: Mapped[str] = mapped_column(String(40), nullable=False)
     entity_id: Mapped[str] = mapped_column(String(160), nullable=False)
     expected_detection: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class User(Base):
+    __tablename__ = "users"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    email: Mapped[str] = mapped_column(String(200), unique=True, nullable=False, index=True)
+    password_hash: Mapped[str] = mapped_column(String(300), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="viewer")
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
