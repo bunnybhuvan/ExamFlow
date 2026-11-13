@@ -246,3 +246,30 @@ def test_separate_room_accommodation_allocates_student_to_private_room(client):
     assert report["failed"] == 0, report
     assert any(check["name"] == "Separate-room accommodations isolated" and check["status"] == "pass"
                for check in report["checks"])
+
+
+
+def test_auth_config_and_password_login(client):
+    from app.models import User
+    from app.security import hash_password
+
+    db = TestingSession()
+    try:
+        db.add(User(id="USR-TEST-LOGIN", email="admin@example.test",
+            password_hash=hash_password("Strong-Test-Password-2026"),
+            role="admin", active=True))
+        db.commit()
+    finally:
+        db.close()
+
+    assert client.get("/api/v1/auth/config").json() == {"enabled": False}
+    response = client.post("/api/v1/auth/login", json={
+        "email": "ADMIN@example.test", "password": "Strong-Test-Password-2026"
+    })
+    assert response.status_code == 200, response.text
+    assert response.json()["user"]["role"] == "admin"
+    assert response.json()["token_type"] == "bearer"
+    invalid = client.post("/api/v1/auth/login", json={
+        "email": "admin@example.test", "password": "incorrect-password"
+    })
+    assert invalid.status_code == 401
