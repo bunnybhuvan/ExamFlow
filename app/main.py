@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
 import csv, io, json, os
+from datetime import timezone
 from fastapi import FastAPI, Depends, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -137,7 +138,7 @@ def reports_metrics(db: Session=Depends(get_db)):
 
 @app.get("/api/v1/audit")
 def audit_list(db: Session=Depends(get_db)):
-    return [{"id":e.id,"timestamp":e.timestamp.isoformat()+"Z","actor":e.actor,"action":e.action,
+    return [{"id":e.id,"timestamp":(e.timestamp.replace(tzinfo=timezone.utc) if e.timestamp.tzinfo is None else e.timestamp.astimezone(timezone.utc)).isoformat().replace("+00:00", "Z"),"actor":e.actor,"action":e.action,
         "entity_type":e.entity_type,"entity_id":e.entity_id,"summary":e.summary,"before":e.before,"after":e.after}
         for e in db.query(models.ScheduleEvent).order_by(models.ScheduleEvent.timestamp.desc()).limit(1000).all()]
 
