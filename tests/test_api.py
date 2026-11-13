@@ -386,3 +386,38 @@ def test_ground_truth_exports_are_separate_csv_and_json(client):
         "EXAM_IN_CLOSED_ROOMS", "ACCOMMODATION_UNAVAILABLE",
         "INVIGILATOR_DOUBLE_BOOKING",
     }
+
+
+def test_normalized_domain_entities_are_generated_with_valid_relationships(client):
+    from app.models import (
+        Course, ExamCourse, ExamRequirement, RoomCapacity,
+        Availability, Accommodation, Exam, Room, Invigilator, Student,
+    )
+    generated = client.post("/api/v1/datasets/generate", json={
+        "seed": 20261114, "students": 120, "exams": 12, "rooms": 10,
+        "invigilators": 12, "include_edge_cases": True,
+    })
+    assert generated.status_code == 200, generated.text
+    db = TestingSession()
+    try:
+        assert db.query(Course).count() == 12
+        assert db.query(ExamCourse).count() == db.query(Exam).count() == 12
+        assert db.query(RoomCapacity).count() == db.query(Room).count() == 10
+        assert db.query(Availability).count() > 0
+        assert db.query(Accommodation).count() > 0
+        assert db.query(ExamRequirement).count() >= 0
+        assert db.query(ExamCourse).filter(~ExamCourse.course_id.in_(
+            db.query(Course.id)
+        )).count() == 0
+        assert db.query(RoomCapacity).filter(RoomCapacity.capacity <= 0).count() == 0
+        assert db.query(Availability).filter(~Availability.invigilator_id.in_(
+            db.query(Invigilator.id)
+        )).count() == 0
+        assert db.query(Accommodation).filter(
+            Accommodation.student_id.is_(None), Accommodation.exam_id.is_(None)
+        ).count() == 0
+        # The legacy fields remain compatibility mirrors for the existing scheduler/API.
+        assert all(course.name for course in db.query(Course).all())
+        assert db.query(Student).count() == 120
+    finally:
+        db.close()
