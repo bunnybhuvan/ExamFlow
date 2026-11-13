@@ -12,7 +12,7 @@ An assignment is accepted only when all applicable checks pass:
 5. **Invigilator availability:** the selected invigilator is available on that date, has remaining duty capacity, and has no overlapping assignment.
 6. **Accessibility:** students requiring accessible seating are only placed in accessible rooms.
 7. **Extra time:** an extra-time-25 accommodation extends the scheduled duration by 25%.
-8. **Unsupported requirements:** a separate-room accommodation is returned as UNSUPPORTED_ACCOMMODATION because this version assigns one room per exam and does not split a cohort across rooms.
+8. **Separate-room accommodation:** each student with a separate-room requirement is allocated a dedicated room; the remaining cohort is allocated to a main room. Each room receives its own available invigilation team. Every room assignment records its exact student IDs, and validation checks that every enrolled student is allocated exactly once.
 
 The independent validation endpoint re-checks accepted assignments for capacity, room overlaps, student overlaps, invigilator overlaps, closures, equipment, accessibility and staff availability.
 
