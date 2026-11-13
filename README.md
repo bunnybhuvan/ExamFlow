@@ -1,6 +1,6 @@
 # ExamFlow — Intelligent Examination Scheduling System
 
-ExamFlow is a full-stack university examination scheduling system. It combines a responsive React/TypeScript operations dashboard with a Python FastAPI scheduling engine and SQLite database.
+ExamFlow is a full-stack university examination scheduling system. It combines a responsive React/TypeScript operations dashboard with a Python FastAPI scheduling engine and SQLAlchemy database.
 
 ## What it does
 
@@ -11,7 +11,7 @@ ExamFlow is a full-stack university examination scheduling system. It combines a
 - Enforces room capacity, room closures, equipment, staff availability and accessibility requirements.
 - Records every dataset and schedule run in an append-only audit event stream.
 - Explains every unassigned exam with a stable reason code.
-- Produces validation reports, metrics, CSV exports and JSON exports.
+- Produces validation reports, metrics, CSV, JSON and SQL database exports.
 - Keeps evaluation edge-case labels separate from the scheduling input. The scheduler never reads the ground-truth label table.
 
 ## Stack
@@ -22,7 +22,7 @@ ExamFlow is a full-stack university examination scheduling system. It combines a
 | Data fetching | TanStack Query |
 | Charts and motion | Recharts, Framer Motion-compatible UI transitions |
 | Backend | Python 3.10+, FastAPI, Pydantic 2 |
-| ORM / database | SQLAlchemy 2, SQLite |
+| ORM / database | SQLAlchemy 2, SQLite locally, PostgreSQL hosted |
 | Tests | Pytest, FastAPI TestClient |
 
 ## Run locally
@@ -46,7 +46,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-The backend creates `data/examflow.db` automatically. Open the interactive API docs at [http://localhost:8000/docs](http://localhost:8000/docs).
+The backend uses local `data/examflow.db` SQLite by default. Set `DATABASE_URL` to a PostgreSQL connection string when using PostgreSQL. Open the interactive API docs at [http://localhost:8000/docs](http://localhost:8000/docs).
 
 ### 2. Frontend
 
@@ -108,6 +108,7 @@ All routes are prefixed with `/api/v1`.
 | GET | `/audit` | Audit event history |
 | GET | `/exports/csv` | Schedule CSV |
 | GET | `/exports/json` | Schedule and report JSON |
+| GET | `/exports/sql` | Full database SQL dump |
 | GET | `/edge-cases` | Evaluation labels only |
 
 ## Tests
@@ -123,8 +124,8 @@ Frontend tests: `npm test`.
 - `docs/ALGORITHM.md` — hard constraints, strategies, reason codes and complexity.
 - `docs/AI_USAGE.md` — transparent AI tool and prompt record.
 - `docs/DEMO.md` — suggested five-minute challenge demonstration.
-- `docs/DEPLOYMENT.md` — Render backend setup, persistent SQLite storage, CORS and Lovable API configuration.
-- `render.yaml` — Render Blueprint for the FastAPI service and persistent disk.
+- `docs/DEPLOYMENT.md` — free Render API, Neon PostgreSQL, CORS and Lovable API configuration.
+- `render.yaml` — free Render Blueprint (requires a separately configured PostgreSQL URL).
 
 ## Quality gates
 
@@ -142,4 +143,4 @@ See [AUDIT.md](./AUDIT.md) for the frontend audit, confirmed repairs, test evide
 
 ## Scope notes
 
-This is a demonstrable scheduling MVP, not a university SIS integration. It schedules each exam in one room and uses local SQLite for reproducible evaluation. Production deployment should use a persistent disk for SQLite or a managed relational database, authentication, authorization and institution-specific policies.
+This is a demonstrable scheduling MVP, not a university SIS integration. It schedules each exam in one room and uses local SQLite for reproducible evaluation. The free hosted deployment uses external PostgreSQL because Render's free filesystem is ephemeral. Production use still requires authentication, authorization, backups and institution-specific policies.
