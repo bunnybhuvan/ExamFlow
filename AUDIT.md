@@ -61,9 +61,9 @@
 
 ## Repository-level CI verification — 13 November 2026
 
-GitHub Actions run [#43439565912](https://github.com/bunnybhuvan/ExamFlow/actions/runs/43439565912) completed successfully on commit `484b0f522acc0726116a1b298ea94f94ba1add2f`.
+GitHub Actions run [#43440543861](https://github.com/bunnybhuvan/ExamFlow/actions/runs/43440543861) completed successfully on commit `8fd503593a3895e323b585fe6aa2df20df1f3396`.
 
-- Backend job: **6 Pytest tests passed** (12 deprecation/runtime warnings). The new faculty-scale smoke test generated 5,000 students, 300 exams, 100 rooms and 200 invigilators, generated a schedule, and asserted zero hard-constraint validation violations.
+- Backend job: **8 Pytest tests passed** (1 upstream Starlette/httpx deprecation warning). The new faculty-scale smoke test generated 5,000 students, 300 exams, 100 rooms and 200 invigilators, generated a schedule, and asserted zero hard-constraint validation violations.
 - Frontend job: **41 Vitest tests passed across 6 files**.
 - `bun install --frozen-lockfile`: passed.
 - `bun run lint`: passed.
@@ -71,5 +71,10 @@ GitHub Actions run [#43439565912](https://github.com/bunnybhuvan/ExamFlow/action
 - `bunx prettier --check "src/**/*.{ts,tsx,css}" "vite.config.ts" "vitest.config.ts" "eslint.config.js"`: passed. This deliberately scopes the formatter gate to frontend source/config files; repository documentation and JSON metadata are not included in that check.
 - `bunx tsc --noEmit`: passed.
 - `bun run build`: passed; Vite/TanStack/Nitro produced the configured Cloudflare Worker build output.
+
+
+- Backend deployment readiness: CORS origins are configurable through `EXAMFLOW_CORS_ORIGINS`, the database health route reports the active SQLAlchemy dialect, and audit timestamps use UTC-aware values.
+- Added `render.yaml` and `docs/DEPLOYMENT.md` for a Render FastAPI service with a persistent SQLite disk. The service has not yet been provisioned or deployed.
+- Hardened `start_examflow.bat` to prefer Python 3.10, fall back to the installed Python launcher version, and repair an incomplete virtual environment before installing dependencies.
 
 This confirms the repository's automated test, lint, source-format, typecheck and build gates. It does not establish a public backend deployment or a live browser-to-API integration test.
