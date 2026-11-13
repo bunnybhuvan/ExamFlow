@@ -157,6 +157,8 @@ def generate_dataset(db: Session, p):
             labels.append(EdgeCaseLabel(id="EDGE-INVIGILATOR-DOUBLE", case_code="INVIGILATOR_DOUBLE_BOOKING",
                 entity_type="exam_pair", entity_id=f"{exams[2].id},{exams[3].id}",
                 expected_detection="Only one invigilator is available for two same-day exams; the solver must leave one unassigned rather than double-book staff."))
+    if p.include_edge_cases:
+        db.add_all(labels)
     db.commit()
     add_event(db, "dataset.generated", "dataset", "current",
         f"Generated {len(students)} students, {len(exams)} exams, {len(rooms)} rooms and {len(invigilators)} invigilators (seed {p.seed}).",
