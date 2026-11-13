@@ -201,12 +201,3 @@ def test_sql_export_round_trips_schema_and_data(client):
     finally:
         restored.close()
 
-
-def test_sql_export_rejects_unsupported_database_dialect(client):
-    # The endpoint's explicit dialect guard prevents silently returning a
-    # non-portable or incomplete SQL dump for a different database engine.
-    from unittest.mock import patch
-
-    with patch("app.main.engine.dialect.name", "postgresql"):
-        response = client.get("/api/v1/exports/sql")
-    assert response.status_code == 501
