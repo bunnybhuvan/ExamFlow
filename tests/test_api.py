@@ -363,3 +363,26 @@ def test_metrics_calculate_conflicts_from_validation_not_a_constant(client):
     assert metrics["constraint_violations"] == sum(
         check["violations"] for check in validation["checks"]
     )
+
+
+def test_ground_truth_exports_are_separate_csv_and_json(client):
+    generated = client.post("/api/v1/datasets/generate", json={
+        "seed": 20261113, "students": 120, "exams": 12, "rooms": 10,
+        "invigilators": 12, "include_edge_cases": True,
+    })
+    assert generated.status_code == 200, generated.text
+
+    csv_response = client.get("/api/v1/exports/ground-truth/csv")
+    assert csv_response.status_code == 200
+    assert 'filename="ground_truth.csv"' in csv_response.headers["content-disposition"]
+    assert "case_code" in csv_response.text
+    assert "STUDENT_OVERLAP" in csv_response.text
+
+    json_response = client.get("/api/v1/exports/ground-truth/json")
+    assert json_response.status_code == 200
+    assert "ground_truth" in json_response.json()
+    assert {row["case_code"] for row in json_response.json()["ground_truth"]} >= {
+        "STUDENT_OVERLAP", "INSUFFICIENT_ROOM_CAPACITY",
+        "EXAM_IN_CLOSED_ROOMS", "ACCOMMODATION_UNAVAILABLE",
+        "INVIGILATOR_DOUBLE_BOOKING",
+    }
