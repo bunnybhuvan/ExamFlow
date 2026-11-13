@@ -143,7 +143,6 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const [authState, setAuthState] = useState<"loading" | "disabled" | "login" | "authenticated">("loading");
-  const [authUser, setAuthUser] = useState<{ id: string; email: string; role: string } | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
@@ -156,7 +155,7 @@ function RootComponent() {
       if (!config.enabled) { setAuthState("disabled"); return; }
       try {
         const user = await api.me();
-        if (active) { setAuthUser(user); setAuthState("authenticated"); }
+        if (active) { setAuthState("authenticated"); }
       } catch {
         if (active) setAuthState("login");
       }
@@ -172,7 +171,6 @@ function RootComponent() {
     setAuthError("");
     try {
       const user = await api.login(email, password);
-      setAuthUser(user);
       setAuthState("authenticated");
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Unable to sign in.");
