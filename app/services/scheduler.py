@@ -220,14 +220,15 @@ def generate_schedule(db: Session, p):
     assigned, unassigned = [], []
     for ex in exams:
         eligible_students = enrollment_map.get(ex.id, [])
-        accommodation_tags = {str(tag).strip().lower().replace(" ", "_").replace("%", "")
+        exam_accommodation_tags = {str(tag).strip().lower().replace(" ", "_").replace("-", "_").replace("%", "")
             for tag in (ex.accommodations or [])}
+        accommodation_tags = set(exam_accommodation_tags)
         for sid in eligible_students:
             if sid in student_by_id:
                 accommodation_tags.update(str(tag).strip().lower().replace(" ", "_").replace("%", "")
                     for tag in (student_by_id[sid].accommodations or []))
         separate_ids = [sid for sid in eligible_students if
-            "separate_room" in accommodation_tags or
+            "separate_room" in exam_accommodation_tags or
             bool({str(tag).strip().lower().replace(" ", "_").replace("-", "_")
                   for tag in (student_by_id[sid].accommodations or [])} & {"separate_room", "individual_room"})]
         if separate_ids:
@@ -475,7 +476,7 @@ def validation_report(db: Session):
     for a in assignments:
         e=exams[a["exam_id"]]; r=rooms[a["room_id"]]
         start=datetime.fromisoformat(a["start"]); end=datetime.fromisoformat(a["end"]); day=start.date().isoformat()
-        if r.capacity<e.enrollment: cap.append({"entity_type":"exam","entity_id":e.id,"message":"Room capacity is below exam enrollment."})
+        if len(allocated_ids)>r.capacity: cap.append({"entity_type":"exam","entity_id":e.id,"message":"Room capacity is below exam enrollment."})
         allocated_ids = set(a.get("student_ids") or enrol.get(e.id,set()))
         assigned_by_exam.setdefault(e.id,[]).extend(sorted(allocated_ids))
         exam_tags = {str(tag).strip().lower().replace(" ", "_").replace("-", "_") for tag in (e.accommodations or [])}
