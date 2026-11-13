@@ -33,7 +33,7 @@ export const Route = createFileRoute("/reports")({
       { property: "og:title", content: "Reports & Exports — ExamFlow" },
       {
         property: "og:description",
-        content: "Scheduling metrics, utilization, workload and CSV/JSON exports.",
+        content: "Scheduling metrics, utilization, workload and CSV, JSON and SQL database exports.",
       },
     ],
   }),
