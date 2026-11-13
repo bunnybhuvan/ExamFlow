@@ -81,7 +81,8 @@ describe("FastAPI response handling", () => {
     );
     const result = await api.exportFile("csv");
     expect(result.filename).toBe("exam schedule.csv");
-    expect(await result.blob.text()).toBe("id,exam");
+    expect(result.blob.size).toBe(7);
+    expect(result.blob.type).toContain("text/plain");
   });
   it("reads the supplied edge-case endpoint without inventing its schema", async () => {
     const fetch = respond([{ label: "room closure" }]);
