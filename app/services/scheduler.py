@@ -303,7 +303,8 @@ def generate_schedule(db: Session, p):
         room,start_dt,end_dt,selected=placed
         assignment_id=f"ASN-{ex.id}-{room.id}"
         assignment=Assignment(id=assignment_id,exam_id=ex.id,room_id=room.id,
-            invigilator_ids=[v.id for v in selected],start=start_dt,end=end_dt,status="confirmed")
+            student_ids=eligible_students,invigilator_ids=[v.id for v in selected],
+            start=start_dt,end=end_dt,status="confirmed")
         db.add(assignment); assigned.append(assignment)
         room_assignments.setdefault(room.id,[]).append((start_dt,end_dt))
         day_key=start_dt.date().isoformat()
