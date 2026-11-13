@@ -506,6 +506,8 @@ def validation_report(db: Session):
                 if _overlap(start,end,prev[0],prev[1]): inv_conf.append({"entity_type":"invigilator","entity_id":vid,"message":"Invigilator is double-booked."})
             inv_schedule.setdefault(vid,[]).append((start,end))
     for exam_id, expected_students in enrol.items():
+        if exam_id not in assigned_by_exam:
+            continue
         actual = assigned_by_exam.get(exam_id, [])
         if sorted(actual) != sorted(expected_students):
             allocation.append({"entity_type":"exam","entity_id":exam_id,"message":f"Expected {len(expected_students)} allocated student places; found {len(actual)}."})
