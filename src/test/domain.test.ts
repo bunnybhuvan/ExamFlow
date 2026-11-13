@@ -5,7 +5,9 @@ import { API_BASE_URL } from "@/lib/api";
 
 describe("demo fixture", () => {
   it("is deterministic for the same seed", () => {
-    expect(JSON.stringify(buildDemoDataset(DEMO_SEED))).toBe(JSON.stringify(buildDemoDataset(DEMO_SEED)));
+    expect(JSON.stringify(buildDemoDataset(DEMO_SEED))).toBe(
+      JSON.stringify(buildDemoDataset(DEMO_SEED)),
+    );
   });
   it("never places an exam in a room smaller than its enrollment", () => {
     const d = buildDemoDataset(DEMO_SEED);
@@ -19,7 +21,8 @@ describe("conflicts", () => {
     const c = deriveConflicts(d.validation, d.unassigned);
     expect(c.filter((x) => x.category === "Unassigned")).toHaveLength(d.unassigned.length);
     const rank = { critical: 0, high: 1, medium: 2, low: 3 };
-    for (let i = 1; i < c.length; i++) expect(rank[c[i].severity]).toBeGreaterThanOrEqual(rank[c[i - 1].severity]);
+    for (let i = 1; i < c.length; i++)
+      expect(rank[c[i].severity]).toBeGreaterThanOrEqual(rank[c[i - 1].severity]);
   });
 });
 

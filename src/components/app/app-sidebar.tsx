@@ -1,8 +1,16 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { CalendarCheck2 } from "lucide-react";
 import {
-  Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader,
-  SidebarMenu, SidebarMenuButton, SidebarMenuItem,
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { NAV } from "./nav";
 import { useDataSource } from "@/lib/data-source";
@@ -19,7 +27,9 @@ export function AppSidebar() {
           <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-gradient shadow-glow">
             <CalendarCheck2 className="size-4 text-primary-foreground" />
           </span>
-          <span className="font-display text-base font-semibold tracking-tight group-data-[collapsible=icon]:hidden">ExamFlow</span>
+          <span className="font-display text-base font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
+            ExamFlow
+          </span>
         </Link>
       </SidebarHeader>
       <SidebarContent>
@@ -33,7 +43,10 @@ export function AppSidebar() {
                   return (
                     <SidebarMenuItem key={n.url}>
                       <SidebarMenuButton asChild isActive={active} tooltip={n.title}>
-                        <Link to={n.url}><n.icon /><span>{n.title}</span></Link>
+                        <Link to={n.url}>
+                          <n.icon />
+                          <span>{n.title}</span>
+                        </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );
@@ -47,8 +60,19 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <div className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-sidebar-foreground/80">
-              <span className={cn("size-2 shrink-0 rounded-full", mode === "api" ? "bg-success" : mode === "demo" ? "bg-warning" : "bg-muted-foreground animate-pulse")} />
-              <span className="group-data-[collapsible=icon]:hidden">{mode === "api" ? "API connected" : mode === "demo" ? "Demo mode" : "Connecting…"}</span>
+              <span
+                className={cn(
+                  "size-2 shrink-0 rounded-full",
+                  mode === "api"
+                    ? "bg-success"
+                    : mode === "demo"
+                      ? "bg-warning"
+                      : "bg-muted-foreground animate-pulse",
+                )}
+              />
+              <span className="group-data-[collapsible=icon]:hidden">
+                {mode === "api" ? "API connected" : mode === "demo" ? "Demo mode" : "Connecting…"}
+              </span>
             </div>
           </SidebarMenuItem>
         </SidebarMenu>

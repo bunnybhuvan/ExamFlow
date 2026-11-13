@@ -96,16 +96,25 @@
   --sidebar-ring: oklch(0.66 0.19 268);
 
   --gradient-brand: linear-gradient(135deg, oklch(0.62 0.2 268), oklch(0.78 0.14 210));
-  --gradient-surface: linear-gradient(180deg, oklch(0.21 0.038 262 / 0.85), oklch(0.18 0.032 262 / 0.75));
-  --gradient-glow: radial-gradient(60rem 30rem at 85% -10%, oklch(0.55 0.2 268 / 0.18), transparent 60%),
+  --gradient-surface: linear-gradient(
+    180deg,
+    oklch(0.21 0.038 262 / 0.85),
+    oklch(0.18 0.032 262 / 0.75)
+  );
+  --gradient-glow:
+    radial-gradient(60rem 30rem at 85% -10%, oklch(0.55 0.2 268 / 0.18), transparent 60%),
     radial-gradient(40rem 25rem at 0% 0%, oklch(0.7 0.14 210 / 0.08), transparent 60%);
   --shadow-panel: 0 1px 0 0 oklch(1 0 0 / 0.04) inset, 0 20px 40px -24px oklch(0.05 0.02 262 / 0.8);
   --shadow-glow: 0 10px 30px -10px oklch(0.62 0.2 268 / 0.55);
 }
 
 @layer base {
-  * { border-color: var(--color-border); }
-  html { color-scheme: dark; }
+  * {
+    border-color: var(--color-border);
+  }
+  html {
+    color-scheme: dark;
+  }
   body {
     background-color: var(--color-background);
     background-image: var(--gradient-glow);
@@ -114,8 +123,15 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
   }
-  h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.02em; }
-  ::selection { background: oklch(0.62 0.2 268 / 0.4); }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+  ::selection {
+    background: oklch(0.62 0.2 268 / 0.4);
+  }
 }
 
 @utility glass {
@@ -124,17 +140,29 @@
   box-shadow: var(--shadow-panel);
   border: 1px solid var(--color-border);
 }
-@utility bg-brand-gradient { background-image: var(--gradient-brand); }
+@utility bg-brand-gradient {
+  background-image: var(--gradient-brand);
+}
 @utility text-brand-gradient {
   background-image: var(--gradient-brand);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
-@utility shadow-glow { box-shadow: var(--shadow-glow); }
-@utility page-enter { animation: page-in 0.35s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@utility shadow-glow {
+  box-shadow: var(--shadow-glow);
+}
+@utility page-enter {
+  animation: page-in 0.35s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
 
 @keyframes page-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }

@@ -1,4 +1,5 @@
 <!-- LOVABLE:BEGIN -->
+
 > [!IMPORTANT]
 > This project is connected to [Lovable](https://lovable.dev). Avoid rewriting
 > published git history — force pushing, or rebasing/amending/squashing commits
@@ -27,10 +28,16 @@ use the editor.
   `LOVABLE_API_KEY`. When Lovable does not provide one, users can bring their
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
+
 <!-- LOVABLE:END -->
 
 ## Project rules
+
+- Keep component exports separate from shared contexts, hooks, schemas, and variant helpers so Fast Refresh boundaries remain valid without lint exceptions.
 - All backend access goes through `src/lib/api.ts`; pages read data only via hooks in `src/lib/data-source.tsx` — keeps API/demo switching in one place.
 - Query keys are prefixed with the data mode (`api` | `demo`) so demo fixture data never mixes with backend data.
 - Backend is FastAPI + SQLite (external); do not add Supabase/Lovable Cloud or auth.
 - tsconfig keeps `strict` but disables `exactOptionalPropertyTypes`/`noUncheckedIndexedAccess` to keep component props ergonomic.
+- Validate API responses against browser-safe schemas before caching them; malformed backend data must produce a visible error rather than an empty success or render exception.
+- Keep export generation in data-source hooks and CSV escaping in a pure helper; mode selection and spreadsheet safety must not diverge between pages.
+- Validate scheduling inputs with the shared pure validator and reload stored defaults when opening the generation dialog; settings must match the next request without hydration differences.

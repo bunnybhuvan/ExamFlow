@@ -1,9 +1,39 @@
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
-const axis = { stroke: "var(--muted-foreground)", fontSize: 11, tickLine: false, axisLine: false } as const;
-const tooltipStyle = { contentStyle: { background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, color: "var(--popover-foreground)" }, cursor: { fill: "color-mix(in oklab, var(--primary) 10%, transparent)" } };
+const axis = {
+  stroke: "var(--muted-foreground)",
+  fontSize: 11,
+  tickLine: false,
+  axisLine: false,
+} as const;
+const tooltipStyle = {
+  contentStyle: {
+    background: "var(--popover)",
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    fontSize: 12,
+    color: "var(--popover-foreground)",
+  },
+  cursor: { fill: "color-mix(in oklab, var(--primary) 10%, transparent)" },
+};
 
-export function CoverageChart({ data, height = 240 }: { data: { label: string; scheduled: number; unassigned: number }[]; height?: number }) {
+export function CoverageChart({
+  data,
+  height = 240,
+}: {
+  data: { label: string; scheduled: number; unassigned: number }[];
+  height?: number;
+}) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <AreaChart data={data} margin={{ left: -20, right: 8, top: 8 }}>
@@ -21,23 +51,56 @@ export function CoverageChart({ data, height = 240 }: { data: { label: string; s
         <XAxis dataKey="label" {...axis} />
         <YAxis {...axis} allowDecimals={false} />
         <Tooltip {...tooltipStyle} />
-        <Area type="monotone" dataKey="scheduled" name="Scheduled" stroke="var(--chart-1)" strokeWidth={2} fill="url(#gSched)" />
-        <Area type="monotone" dataKey="unassigned" name="Unassigned" stroke="var(--chart-4)" strokeWidth={2} fill="url(#gUn)" />
+        <Area
+          type="monotone"
+          dataKey="scheduled"
+          name="Scheduled"
+          stroke="var(--chart-1)"
+          strokeWidth={2}
+          fill="url(#gSched)"
+        />
+        <Area
+          type="monotone"
+          dataKey="unassigned"
+          name="Unassigned"
+          stroke="var(--chart-4)"
+          strokeWidth={2}
+          fill="url(#gUn)"
+        />
       </AreaChart>
     </ResponsiveContainer>
   );
 }
 
-export function HBarChart({ data, dataKey, nameKey, height = 280, color = "var(--chart-2)", percent }: {
-  data: object[]; dataKey: string; nameKey: string; height?: number; color?: string; percent?: boolean;
+export function HBarChart({
+  data,
+  dataKey,
+  nameKey,
+  height = 280,
+  color = "var(--chart-2)",
+  percent,
+}: {
+  data: object[];
+  dataKey: string;
+  nameKey: string;
+  height?: number;
+  color?: string;
+  percent?: boolean;
 }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} layout="vertical" margin={{ left: 10, right: 16 }}>
         <CartesianGrid stroke="var(--border)" horizontal={false} />
-        <XAxis type="number" {...axis} tickFormatter={percent ? (v) => `${Math.round(v * 100)}%` : undefined} />
+        <XAxis
+          type="number"
+          {...axis}
+          tickFormatter={percent ? (v) => `${Math.round(v * 100)}%` : undefined}
+        />
         <YAxis type="category" dataKey={nameKey} {...axis} width={110} />
-        <Tooltip {...tooltipStyle} formatter={(v: number) => (percent ? `${Math.round(v * 100)}%` : v)} />
+        <Tooltip
+          {...tooltipStyle}
+          formatter={(v: number) => (percent ? `${Math.round(v * 100)}%` : v)}
+        />
         <Bar dataKey={dataKey} fill={color} radius={[0, 4, 4, 0]} barSize={12} />
       </BarChart>
     </ResponsiveContainer>

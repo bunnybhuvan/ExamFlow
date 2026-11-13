@@ -1,4 +1,16 @@
-import { LayoutDashboard, CalendarRange, FileText, Users, DoorOpen, ShieldCheck, AlertTriangle, ListChecks, Download, History, Settings } from "lucide-react";
+import {
+  LayoutDashboard,
+  CalendarRange,
+  FileText,
+  Users,
+  DoorOpen,
+  ShieldCheck,
+  AlertTriangle,
+  ListChecks,
+  Download,
+  History,
+  Settings,
+} from "lucide-react";
 export const NAV = [
   { title: "Overview", url: "/", icon: LayoutDashboard, group: "Operate" },
   { title: "Schedule", url: "/schedule", icon: CalendarRange, group: "Operate" },

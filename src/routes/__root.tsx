@@ -18,7 +18,7 @@ import { AppSidebar } from "@/components/app/app-sidebar";
 import { TopBar } from "@/components/app/top-bar";
 import { DemoBanner } from "@/components/app/demo-banner";
 import { AppActionsProvider } from "@/components/app/app-actions";
-import { DataSourceProvider } from "@/lib/data-source";
+import { DataSourceProvider } from "@/lib/data-source-provider";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
 function NotFoundComponent() {
@@ -90,9 +90,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "ExamFlow — Exam scheduling & operations" },
-      { name: "description", content: "Intelligent examination scheduling and operations platform." },
+      {
+        name: "description",
+        content: "Intelligent examination scheduling and operations platform.",
+      },
       { property: "og:title", content: "ExamFlow" },
-      { property: "og:description", content: "Intelligent examination scheduling and operations platform." },
+      {
+        property: "og:description",
+        content: "Intelligent examination scheduling and operations platform.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
