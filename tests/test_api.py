@@ -5,7 +5,7 @@ from sqlalchemy.pool import StaticPool
 import sqlite3
 from app.models import EdgeCaseLabel
 import pytest
-from app.database import Base, get_db
+from app.database import Base, get_db, normalize_database_url
 from app.main import app, configured_cors_origins
 
 engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
@@ -201,3 +201,16 @@ def test_sql_export_round_trips_schema_and_data(client):
     finally:
         restored.close()
 
+
+
+
+def test_postgresql_connection_url_normalization():
+    assert normalize_database_url(
+        "postgres://user:secret@host.example/db?sslmode=require"
+    ) == "postgresql+psycopg://user:secret@host.example/db?sslmode=require"
+    assert normalize_database_url(
+        "postgresql://user:secret@host.example/db?sslmode=require"
+    ) == "postgresql+psycopg://user:secret@host.example/db?sslmode=require"
+    assert normalize_database_url(
+        "sqlite:///./data/test.db"
+    ) == "sqlite:///./data/test.db"
