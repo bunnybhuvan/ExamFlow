@@ -429,7 +429,8 @@ def assignment_rows(db: Session):
         e=exams[a.exam_id]; r=rooms[a.room_id]
         out.append({"id":a.id,"exam_id":e.id,"course_code":e.course_code,"course_name":e.course_name,
             "room_id":r.id,"room_name":r.name,"invigilator_ids":a.invigilator_ids,
-            "start":a.start.isoformat(),"end":a.end.isoformat(),"enrolled":e.enrollment,"capacity":r.capacity,"status":a.status})
+            "student_ids":a.student_ids or [],"start":a.start.isoformat(),"end":a.end.isoformat(),
+            "enrolled":len(a.student_ids or []) or e.enrollment,"capacity":r.capacity,"status":a.status})
     return out
 
 def unassigned_rows(db: Session):
@@ -441,8 +442,12 @@ def metrics_report(db: Session):
     exams=db.query(Exam).all(); assignments=assignment_rows(db); unassigned=unassigned_rows(db)
     rooms=db.query(Room).all(); invs=db.query(Invigilator).all()
     coverage={}
+    seen_exam_days=set()
     for a in assignments:
-        day=a["start"][:10]; coverage.setdefault(day,{"date":day,"scheduled":0,"unassigned":0}); coverage[day]["scheduled"]+=1
+        day=a["start"][:10]
+        if (a["exam_id"],day) not in seen_exam_days:
+            coverage.setdefault(day,{"date":day,"scheduled":0,"unassigned":0}); coverage[day]["scheduled"]+=1
+            seen_exam_days.add((a["exam_id"],day))
     for u in unassigned:
         e=next((x for x in exams if x.id==u["exam_id"]),None)
         if e:
@@ -470,8 +475,9 @@ def validation_report(db: Session):
         e=exams[a["exam_id"]]; r=rooms[a["room_id"]]
         start=datetime.fromisoformat(a["start"]); end=datetime.fromisoformat(a["end"]); day=start.date().isoformat()
         if r.capacity<e.enrollment: cap.append({"entity_type":"exam","entity_id":e.id,"message":"Room capacity is below exam enrollment."})
-        enrolled_accommodations = {str(tag).strip().lower().replace(" ", "_").replace("%", "")
-            for sid in enrol.get(e.id,set()) if sid in students for tag in (students[sid].accommodations or [])}
+        allocated_ids = set(a.get("student_ids") or enrol.get(e.id,set()))
+        enrolled_accommodations = {str(tag).strip().lower().replace(" ", "_").replace("-", "_").replace("%", "")
+            for sid in allocated_ids if sid in students for tag in (students[sid].accommodations or [])}
         enrolled_accommodations.update(str(tag).strip().lower().replace(" ", "_").replace("%", "") for tag in (e.accommodations or []))
         if not r.accessible and enrolled_accommodations & {"accessible_seating","wheelchair","accessible"}:
             accom.append({"entity_type":"exam","entity_id":e.id,"message":"An enrolled student requires accessible seating but the assigned room is not accessible."})
@@ -479,7 +485,7 @@ def validation_report(db: Session):
             accom.append({"entity_type":"exam","entity_id":e.id,"message":"An enrolled student requires screen-reader support but the assigned room lacks computer equipment."})
         if any(c.get("start","")<=day<=c.get("end","") for c in (r.closures or [])): closed.append({"entity_type":"room","entity_id":r.id,"message":"Assignment occurs during a room closure."})
         if not set(e.required_equipment or []).issubset(set(r.equipment or [])): equip.append({"entity_type":"exam","entity_id":e.id,"message":"Required equipment is missing."})
-        for sid in enrol.get(e.id,set()):
+        for sid in allocated_ids:
             for prev in student_schedule.get(sid,[]):
                 if _overlap(start,end,prev[0],prev[1]): student_conf.append({"entity_type":"student","entity_id":sid,"message":"Student has overlapping exams."})
             student_schedule.setdefault(sid,[]).append((start,end))
