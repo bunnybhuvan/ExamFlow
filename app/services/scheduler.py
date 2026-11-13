@@ -452,7 +452,7 @@ def metrics_report(db: Session):
         e=next((x for x in exams if x.id==u["exam_id"]),None)
         if e:
             day=e.window_start.isoformat(); coverage.setdefault(day,{"date":day,"scheduled":0,"unassigned":0}); coverage[day]["unassigned"]+=1
-    return {"total_exams":len(exams),"scheduled":len(assignments),"unassigned":len(unassigned),
+    return {"total_exams":len(exams),"scheduled":len({row["exam_id"] for row in assignments}),"unassigned":len(unassigned),
         "conflicts":0,"room_utilization":sum(r.utilization for r in rooms)/max(1,len(rooms)),
         "coverage_by_day":sorted(coverage.values(),key=lambda x:x["date"]),
         "room_usage":[{"room":r.name,"utilization":r.utilization} for r in rooms],
@@ -470,12 +470,18 @@ def validation_report(db: Session):
         checks.append({"id":name.lower().replace(" ","-"),"name":name,"category":category,
             "status":"fail" if violations else "pass","violations":violations,"severity":severity,
             "description":description,"details":details or []})
-    cap=[]; closed=[]; equip=[]; room_conf=[]; student_conf=[]; inv_conf=[]; accom=[]; inv_avail=[]
+    cap=[]; closed=[]; equip=[]; room_conf=[]; student_conf=[]; inv_conf=[]; accom=[]; inv_avail=[]; allocation=[]; separate_room=[]
+    assigned_by_exam={}
     for a in assignments:
         e=exams[a["exam_id"]]; r=rooms[a["room_id"]]
         start=datetime.fromisoformat(a["start"]); end=datetime.fromisoformat(a["end"]); day=start.date().isoformat()
         if r.capacity<e.enrollment: cap.append({"entity_type":"exam","entity_id":e.id,"message":"Room capacity is below exam enrollment."})
         allocated_ids = set(a.get("student_ids") or enrol.get(e.id,set()))
+        assigned_by_exam.setdefault(e.id,[]).extend(sorted(allocated_ids))
+        exam_tags = {str(tag).strip().lower().replace(" ", "_").replace("-", "_") for tag in (e.accommodations or [])}
+        separate_required = "separate_room" in exam_tags or any("separate_room" in {str(tag).strip().lower().replace(" ", "_").replace("-", "_") for tag in (students[sid].accommodations or [])} for sid in allocated_ids if sid in students)
+        if separate_required and len(allocated_ids) != 1:
+            separate_room.append({"entity_type":"exam","entity_id":e.id,"message":"A student requiring a separate room shares a room with another student."})
         enrolled_accommodations = {str(tag).strip().lower().replace(" ", "_").replace("-", "_").replace("%", "")
             for sid in allocated_ids if sid in students for tag in (students[sid].accommodations or [])}
         enrolled_accommodations.update(str(tag).strip().lower().replace(" ", "_").replace("%", "") for tag in (e.accommodations or []))
@@ -498,6 +504,12 @@ def validation_report(db: Session):
             for prev in inv_schedule.get(vid,[]):
                 if _overlap(start,end,prev[0],prev[1]): inv_conf.append({"entity_type":"invigilator","entity_id":vid,"message":"Invigilator is double-booked."})
             inv_schedule.setdefault(vid,[]).append((start,end))
+    for exam_id, expected_students in enrol.items():
+        actual = assigned_by_exam.get(exam_id, [])
+        if sorted(actual) != sorted(expected_students):
+            allocation.append({"entity_type":"exam","entity_id":exam_id,"message":f"Expected {len(expected_students)} allocated student places; found {len(actual)}."})
+    add("Every enrolled student allocated once","hard",len(allocation),"Every enrolled student must be allocated to exactly one room for the exam.","critical",allocation)
+    add("Separate-room accommodations isolated","hard",len(separate_room),"Students requiring a separate room must be the only student in that room.","critical",separate_room)
     add("Room capacity respected","hard",len(cap),"Every assigned room must seat all enrolled students.","critical",cap)
     add("No room double booking","hard",len(room_conf),"A room cannot host overlapping exams.","critical",room_conf)
     add("No student exam overlap","hard",len(student_conf),"A student cannot be assigned to overlapping exams.","critical",student_conf)
