@@ -19,8 +19,9 @@ def add_event(db: Session, action: str, entity_type: str, entity_id: str, summar
         before=before, after=after, timestamp=datetime.now(timezone.utc)))
 
 def generate_dataset(db: Session, p):
-    # Clear dependent data first; this is a deliberate full dataset replacement.
-    for model in [Assignment, UnassignedExam, Enrollment, ScheduleRun, ScheduleEvent, EdgeCaseLabel,
+    # Replace the active synthetic dataset, but never delete audit events or prior run records.
+    # ScheduleEvent.after stores immutable snapshots of completed schedule runs.
+    for model in [Assignment, UnassignedExam, Enrollment, EdgeCaseLabel,
                   Student, Exam, Room, Invigilator]:
         db.query(model).delete(synchronize_session=False)
     db.flush()
@@ -413,9 +414,23 @@ def generate_schedule(db: Session, p):
     run=ScheduleRun(id=run_id,seed=p.seed,scheduled=len(assigned),unassigned=len(unassigned),
         duration_ms=duration_ms,strategy=p.strategy)
     db.add(run); db.commit()
+    # Keep a compact, append-only snapshot so later schedule generations cannot erase
+    # the assignments and explanations produced by this run.
+    assignment_snapshot = [
+        {"assignment_id": row["id"], "exam_id": row["exam_id"], "room_id": row["room_id"],
+         "invigilator_ids": row["invigilator_ids"], "student_ids": row["student_ids"],
+         "start": row["start"], "end": row["end"], "status": row["status"]}
+        for row in assignment_rows(db)
+    ]
+    unassigned_snapshot = [
+        {"exam_id": row["exam_id"], "reason_code": row["reason_code"], "reason": row["reason"]}
+        for row in unassigned_rows(db)
+    ]
     add_event(db,"schedule.generated","schedule",run_id,
         f"Schedule generated: {len(assigned)} assigned, {len(unassigned)} unassigned in {duration_ms} ms.",
-        after={"run_id":run_id,"scheduled":len(assigned),"unassigned":len(unassigned),"strategy":p.strategy})
+        after={"run_id":run_id,"scheduled":len(assigned),"unassigned":len(unassigned),
+               "strategy":p.strategy,"assignments":assignment_snapshot,
+               "unassigned_items":unassigned_snapshot})
     db.commit()
     items=[]
     for ex,code,reason in unassigned:
@@ -453,8 +468,29 @@ def metrics_report(db: Session):
         e=next((x for x in exams if x.id==u["exam_id"]),None)
         if e:
             day=e.window_start.isoformat(); coverage.setdefault(day,{"date":day,"scheduled":0,"unassigned":0}); coverage[day]["unassigned"]+=1
+    validation = validation_report(db)
+    conflict_checks = {
+        "Every enrolled student allocated once",
+        "Room capacity respected",
+        "No room double booking",
+        "No student exam overlap",
+        "No invigilator double booking",
+        "Room closures honoured",
+        "Required equipment available",
+        "Accessibility accommodations respected",
+        "Invigilator availability respected",
+        "Separate-room accommodations isolated",
+    }
+    conflict_details = [
+        {"check": check["name"], "violations": check["violations"]}
+        for check in validation["checks"]
+        if check["name"] in conflict_checks and check["violations"] > 0
+    ]
+    conflicts = sum(item["violations"] for item in conflict_details)
     return {"total_exams":len(exams),"scheduled":len({row["exam_id"] for row in assignments}),"unassigned":len(unassigned),
-        "conflicts":0,"room_utilization":sum(r.utilization for r in rooms)/max(1,len(rooms)),
+        "conflicts":conflicts,"conflict_details":conflict_details,
+        "constraint_violations":sum(check["violations"] for check in validation["checks"]),
+        "room_utilization":sum(r.utilization for r in rooms)/max(1,len(rooms)),
         "coverage_by_day":sorted(coverage.values(),key=lambda x:x["date"]),
         "room_usage":[{"room":r.name,"utilization":r.utilization} for r in rooms],
         "invigilator_workload":[{"name":v.name,"duties":v.assigned_duties,"max":v.max_duties} for v in invs]}

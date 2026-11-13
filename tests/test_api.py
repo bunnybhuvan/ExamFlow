@@ -311,3 +311,78 @@ def test_role_based_access_control_enforces_read_only_viewers(client, monkeypatc
         "current_password": "Strong-Viewer-Password-2026",
         "new_password": "Even-Stronger-Password-2026"
     }).status_code == 200
+
+
+def test_dataset_regeneration_preserves_audit_and_schedule_run_history(client):
+    first = _generate_small_schedule(client)
+    first_events = client.get("/api/v1/audit").json()
+    first_schedule_event = next(
+        event for event in first_events if event["action"] == "schedule.generated"
+    )
+    assert first_schedule_event["after"]["assignments"]
+    assert len(first_schedule_event["after"]["assignments"]) == len(first["assignments"])
+
+    second = client.post("/api/v1/datasets/generate", json={
+        "seed": 20261114, "students": 40, "exams": 5, "rooms": 6,
+        "invigilators": 8, "include_edge_cases": False,
+    })
+    assert second.status_code == 200, second.text
+
+    db = TestingSession()
+    try:
+        from app.models import ScheduleRun, ScheduleEvent
+        assert db.query(ScheduleRun).count() == 1
+        assert db.query(ScheduleEvent).filter_by(action="schedule.generated").count() == 1
+        assert db.query(ScheduleEvent).filter_by(action="dataset.generated").count() == 2
+    finally:
+        db.close()
+
+
+def test_metrics_calculate_conflicts_from_validation_not_a_constant(client):
+    _generate_small_schedule(client)
+    metrics = client.get("/api/v1/reports/metrics").json()
+    validation = client.get("/api/v1/reports/validation").json()
+    expected = sum(
+        check["violations"]
+        for check in validation["checks"]
+        if check["name"] in {
+            "Every enrolled student allocated once",
+            "Room capacity respected",
+            "No room double booking",
+            "No student exam overlap",
+            "No invigilator double booking",
+            "Room closures honoured",
+            "Required equipment available",
+            "Accessibility accommodations respected",
+            "Invigilator availability respected",
+            "Separate-room accommodations isolated",
+        }
+    )
+    assert metrics["conflicts"] == expected
+    assert metrics["conflicts"] == 0
+    assert metrics["constraint_violations"] == sum(
+        check["violations"] for check in validation["checks"]
+    )
+
+
+def test_ground_truth_exports_are_separate_csv_and_json(client):
+    generated = client.post("/api/v1/datasets/generate", json={
+        "seed": 20261113, "students": 120, "exams": 12, "rooms": 10,
+        "invigilators": 12, "include_edge_cases": True,
+    })
+    assert generated.status_code == 200, generated.text
+
+    csv_response = client.get("/api/v1/exports/ground-truth/csv")
+    assert csv_response.status_code == 200
+    assert 'filename="ground_truth.csv"' in csv_response.headers["content-disposition"]
+    assert "case_code" in csv_response.text
+    assert "STUDENT_OVERLAP" in csv_response.text
+
+    json_response = client.get("/api/v1/exports/ground-truth/json")
+    assert json_response.status_code == 200
+    assert "ground_truth" in json_response.json()
+    assert {row["case_code"] for row in json_response.json()["ground_truth"]} >= {
+        "STUDENT_OVERLAP", "INSUFFICIENT_ROOM_CAPACITY",
+        "EXAM_IN_CLOSED_ROOMS", "ACCOMMODATION_UNAVAILABLE",
+        "INVIGILATOR_DOUBLE_BOOKING",
+    }
