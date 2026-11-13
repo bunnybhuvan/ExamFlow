@@ -354,6 +354,34 @@ def exports(file_format: str, db: Session=Depends(get_db)):
             headers={"Content-Disposition":'attachment; filename="examflow-schedule.csv"'})
     raise HTTPException(404,detail="Export format must be csv, json or sql.")
 
+@app.get("/api/v1/exports/ground-truth/{file_format}")
+def export_ground_truth(file_format: str, db: Session=Depends(get_db)):
+    """Export evaluation labels separately from scheduler input and schedule exports."""
+    labels = db.query(models.EdgeCaseLabel).order_by(models.EdgeCaseLabel.id).all()
+    rows = [{"id": row.id, "case_code": row.case_code, "entity_type": row.entity_type,
+             "entity_id": row.entity_id, "expected_detection": row.expected_detection}
+            for row in labels]
+    if file_format == "json":
+        return Response(
+            content=json.dumps({"ground_truth": rows}, ensure_ascii=False, indent=2),
+            media_type="application/json",
+            headers={"Content-Disposition": 'attachment; filename="ground_truth.json"'},
+        )
+    if file_format == "csv":
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=[
+            "id", "case_code", "entity_type", "entity_id", "expected_detection"
+        ])
+        writer.writeheader()
+        writer.writerows(rows)
+        return Response(
+            content=output.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": 'attachment; filename="ground_truth.csv"'},
+        )
+    raise HTTPException(status_code=404, detail="Ground-truth format must be csv or json.")
+
+
 @app.get("/api/v1/edge-cases")
 def edge_cases_list(db: Session=Depends(get_db)):
     # Evaluation labels are exposed for reporting only; scheduling logic never reads them.
