@@ -3,7 +3,8 @@ from datetime import date, datetime, time as dtime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from ..models import (Student, Exam, Room, Invigilator, Enrollment, Assignment,
-                      UnassignedExam, ScheduleRun, ScheduleEvent, EdgeCaseLabel)
+                      UnassignedExam, ScheduleRun, ScheduleEvent, EdgeCaseLabel,
+                      Course, ExamCourse, ExamRequirement, RoomCapacity, Availability, Accommodation)
 
 DEPARTMENTS = ["Computer Science", "Mathematics", "Physics", "Chemistry", "Economics", "Biology", "Engineering", "Statistics"]
 PREFIX = {"Computer Science":"CS", "Mathematics":"MATH", "Physics":"PHYS", "Chemistry":"CHEM", "Economics":"ECON", "Biology":"BIO", "Engineering":"ENG", "Statistics":"STAT"}
@@ -22,7 +23,8 @@ def generate_dataset(db: Session, p):
     # Replace the active synthetic dataset, but never delete audit events or prior run records.
     # ScheduleEvent.after stores immutable snapshots of completed schedule runs.
     for model in [Assignment, UnassignedExam, Enrollment, EdgeCaseLabel,
-                  Student, Exam, Room, Invigilator]:
+                  ExamCourse, ExamRequirement, RoomCapacity, Availability, Accommodation,
+                  Student, Exam, Room, Invigilator, Course]:
         db.query(model).delete(synchronize_session=False)
     db.flush()
     rng = random.Random(p.seed)
@@ -165,6 +167,45 @@ def generate_dataset(db: Session, p):
                 expected_detection="Only one invigilator is available for two same-day exams; the solver must leave one unassigned rather than double-book staff."))
     if p.include_edge_cases:
         db.add_all(labels)
+
+    # Materialize normalized master/constraint records after edge-case mutations so
+    # the relational representation exactly matches the generated baseline.
+    course_by_code = {}
+    for exam in exams:
+        course = course_by_code.get(exam.course_code)
+        if course is None:
+            course = Course(id=exam.course_code, name=exam.course_name, department=exam.department)
+            course_by_code[exam.course_code] = course
+        db.add(ExamCourse(exam_id=exam.id, course_id=exam.course_code))
+        for index, equipment in enumerate(exam.required_equipment or []):
+            db.add(ExamRequirement(id=f"REQ-{exam.id}-EQ-{index+1:03d}",
+                exam_id=exam.id, requirement_type="equipment", requirement_value=equipment, required=True))
+        for index, tag in enumerate(exam.accommodations or []):
+            db.add(ExamRequirement(id=f"REQ-{exam.id}-AC-{index+1:03d}",
+                exam_id=exam.id, requirement_type="accommodation", requirement_value=str(tag), required=True))
+    db.add_all(course_by_code.values())
+
+    for room in rooms:
+        db.add(RoomCapacity(id=f"CAP-{room.id}-20260101", room_id=room.id,
+            capacity=room.capacity, effective_from=date(2026, 1, 1), effective_to=None))
+
+    for invigilator in invigilators:
+        for available_day in invigilator.available_days or []:
+            db.add(Availability(id=f"AVL-{invigilator.id}-{available_day}",
+                invigilator_id=invigilator.id, available_date=date.fromisoformat(available_day),
+                is_available=True))
+
+    for student in students:
+        for index, tag in enumerate(student.accommodations or []):
+            db.add(Accommodation(id=f"ACC-STU-{student.id}-{index+1:03d}",
+                student_id=student.id, exam_id=None, accommodation_type=str(tag),
+                details="", effective_from=date(2026, 1, 1), effective_to=None))
+    for exam in exams:
+        for index, tag in enumerate(exam.accommodations or []):
+            db.add(Accommodation(id=f"ACC-EXAM-{exam.id}-{index+1:03d}",
+                student_id=None, exam_id=exam.id, accommodation_type=str(tag),
+                details="", effective_from=date(2026, 1, 1), effective_to=None))
+
     db.commit()
     add_event(db, "dataset.generated", "dataset", "current",
         f"Generated {len(students)} students, {len(exams)} exams, {len(rooms)} rooms and {len(invigilators)} invigilators (seed {p.seed}).",
