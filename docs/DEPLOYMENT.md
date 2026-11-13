@@ -13,7 +13,7 @@ No paid Render service, persistent disk, or paid database is part of this setup.
 
 1. Create a project on Neon and select its free plan.
 2. Create or use the default database and copy its connection string.
-3. Keep the connection string private. Do not commit it, put it in frontend variables, or send it in chat. Neon Free currently includes 100 compute-hours and 1 GB storage per project monthly; when compute or transfer limits are reached, compute is suspended rather than billed for Free-plan overages. [Neon Free-plan quotas](https://neon.com/docs/introduction/free-plan).
+3. Keep the connection string private. Do not commit it, put it in frontend variables, or send it in chat. Neon Free currently includes 100 compute-hours and 1 GB storage per project monthly; when compute or transfer limits are reached, compute is suspended rather than billed for Free-plan overages. [Neon Free-plan quotas](https://neon.com/docs/introduction/plans).
 
 ## 2. Deploy the API on Render
 
