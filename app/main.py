@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
-import csv, io, json, os
+import csv, io, json, os, hashlib, zipfile
 from datetime import timezone
 from fastapi import FastAPI, Depends, HTTPException, Response, Request
 from pydantic import BaseModel, Field
@@ -267,6 +267,86 @@ def audit_list(db: Session=Depends(get_db)):
     return [{"id":e.id,"timestamp":(e.timestamp.replace(tzinfo=timezone.utc) if e.timestamp.tzinfo is None else e.timestamp.astimezone(timezone.utc)).isoformat().replace("+00:00", "Z"),"actor":e.actor,"action":e.action,
         "entity_type":e.entity_type,"entity_id":e.entity_id,"summary":e.summary,"before":e.before,"after":e.after}
         for e in db.query(models.ScheduleEvent).order_by(models.ScheduleEvent.timestamp.desc()).limit(1000).all()]
+
+@app.get("/api/v1/exports/bundle")
+def export_dataset_bundle(db: Session=Depends(get_db)):
+    """Download a reproducible, self-describing dataset and evaluation package."""
+    tables = [
+        models.Student, models.Course, models.Exam, models.ExamCourse, models.Enrollment,
+        models.ExamRequirement, models.Room, models.RoomCapacity, models.Invigilator,
+        models.Availability, models.Accommodation, models.Assignment,
+        models.UnassignedExam, models.EdgeCaseLabel,
+    ]
+    archive_buffer = io.BytesIO()
+    manifest = {"project": "ExamFlow", "format_version": 1, "tables": {}}
+    with zipfile.ZipFile(archive_buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for model in tables:
+            rows = db.query(model).all()
+            columns = list(model.__table__.columns)
+            records = []
+            for row in rows:
+                item = {}
+                for column in columns:
+                    value = getattr(row, column.name)
+                    item[column.name] = value.isoformat() if hasattr(value, "isoformat") else value
+                records.append(item)
+            records.sort(key=lambda item: json.dumps(item.get(model.__table__.primary_key.columns.values()[0].name), sort_keys=True))
+            json_content = json.dumps(records, ensure_ascii=False, sort_keys=True, indent=2)
+            csv_buffer = io.StringIO()
+            writer = csv.DictWriter(csv_buffer, fieldnames=[column.name for column in columns])
+            writer.writeheader()
+            for record in records:
+                writer.writerow({key: json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else value
+                                 for key, value in record.items()})
+            json_path = f"data/{model.__tablename__}.json"
+            csv_path = f"data/{model.__tablename__}.csv"
+            archive.writestr(json_path, json_content)
+            archive.writestr(csv_path, csv_buffer.getvalue())
+            manifest["tables"][model.__tablename__] = {
+                "rows": len(records),
+                "json_sha256": hashlib.sha256(json_content.encode("utf-8")).hexdigest(),
+                "csv_sha256": hashlib.sha256(csv_buffer.getvalue().encode("utf-8")).hexdigest(),
+            }
+        manifest["seed"] = max((run.seed for run in db.query(models.ScheduleRun).all()), default=None)
+        manifest["source"] = "Synthetic ExamFlow dataset; generated deterministically from the recorded seed."
+        manifest["ground_truth_separation"] = "edge_case_labels is evaluation-only and is not a scheduler input."
+        archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+        archive.writestr("README.txt", (
+            "ExamFlow dataset bundle\n"
+            "Contains CSV and JSON exports for domain, scheduling and evaluation tables.\n"
+            "manifest.json records row counts and SHA-256 checksums.\n"
+            "edge_case_labels contains evaluation ground truth and must not be used as a scheduler feature.\n"
+            "Use the separately available /api/v1/exports/sql endpoint for a database DDL/data snapshot.\n"
+        ))
+    return Response(content=archive_buffer.getvalue(), media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="examflow-dataset-bundle.zip"'})
+
+
+@app.get("/api/v1/exports/reproducibility")
+def export_reproducibility_report(db: Session=Depends(get_db)):
+    """Return stable row counts and checksums for deterministic generated data."""
+    tables = [
+        models.Student, models.Course, models.Exam, models.ExamCourse, models.Enrollment,
+        models.ExamRequirement, models.Room, models.RoomCapacity, models.Invigilator,
+        models.Availability, models.Accommodation, models.EdgeCaseLabel,
+    ]
+    report = {"tables": {}, "seed": max((run.seed for run in db.query(models.ScheduleRun).all()), default=None)}
+    for model in tables:
+        records = []
+        for row in db.query(model).all():
+            item = {}
+            for column in model.__table__.columns:
+                value = getattr(row, column.name)
+                item[column.name] = value.isoformat() if hasattr(value, "isoformat") else value
+            records.append(item)
+        records.sort(key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":")))
+        canonical = json.dumps(records, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        report["tables"][model.__tablename__] = {
+            "rows": len(records),
+            "sha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+        }
+    return report
+
 
 @app.get("/api/v1/exports/{file_format}")
 def exports(file_format: str, db: Session=Depends(get_db)):
