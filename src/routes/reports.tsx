@@ -8,6 +8,7 @@ import {
   CalendarCheck,
   DoorOpen,
   Users,
+  Database,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,7 @@ export const Route = createFileRoute("/reports")({
       { title: "Reports & Exports — ExamFlow" },
       {
         name: "description",
-        content: "Scheduling metrics, utilization, workload and CSV/JSON exports.",
+        content: "Scheduling metrics, utilization, workload and CSV, JSON and SQL database exports.",
       },
       { property: "og:title", content: "Reports & Exports — ExamFlow" },
       {
@@ -64,7 +65,7 @@ function ReportsPage() {
     <div className="page-enter space-y-6">
       <PageHeader
         title="Reports & Exports"
-        description="Session metrics and downloadable schedule exports."
+        description="Session metrics and downloadable schedule and database exports."
         actions={
           <>
             <Button
@@ -82,6 +83,11 @@ function ReportsPage() {
             >
               {busy === "json" ? <Loader2 className="animate-spin" /> : <Braces />} Export JSON
             </Button>
+            {mode === "api" && (
+              <Button variant="subtle" onClick={() => doExport("sql")} disabled={!!busy}>
+                {busy === "sql" ? <Loader2 className="animate-spin" /> : <Database />} Export SQL
+              </Button>
+            )}
           </>
         }
       />
