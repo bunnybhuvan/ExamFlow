@@ -14,3 +14,11 @@ services:
         sync: false
       - key: EXAMFLOW_CORS_ORIGINS
         sync: false
+      - key: EXAMFLOW_AUTH_ENABLED
+        value: "false"
+      - key: EXAMFLOW_AUTH_SECRET
+        sync: false
+      - key: EXAMFLOW_ADMIN_EMAIL
+        sync: false
+      - key: EXAMFLOW_ADMIN_PASSWORD
+        sync: false
