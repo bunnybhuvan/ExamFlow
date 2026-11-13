@@ -464,7 +464,7 @@ def test_reproducibility_report_has_stable_hashes_for_generated_domain_tables(cl
 
 
 def test_normalized_availability_and_effective_capacity_drive_schedule(client):
-    from app.models import Availability, RoomCapacity
+    from app.models import Availability, RoomCapacity, Accommodation, ExamRequirement, Exam, Student, Room
     generated = client.post("/api/v1/datasets/generate", json={
         "seed": 20261022, "students": 80, "exams": 4, "rooms": 4,
         "invigilators": 4, "include_edge_cases": False,
@@ -472,6 +472,17 @@ def test_normalized_availability_and_effective_capacity_drive_schedule(client):
     assert generated.status_code == 200, generated.text
     db = TestingSession()
     try:
+        # Remove unrelated constraints so staff availability is the only blocker.
+        db.query(ExamRequirement).delete()
+        db.query(Accommodation).delete()
+        for exam in db.query(Exam).all():
+            exam.required_equipment, exam.accommodations = [], []
+        for student in db.query(Student).all():
+            student.accommodations = []
+        for room in db.query(Room).all():
+            room.capacity = 240
+        for row in db.query(RoomCapacity).all():
+            row.capacity = 240
         # Every normalized availability row is closed. The legacy JSON remains
         # populated, so a scheduler that ignores Availability would incorrectly assign.
         for row in db.query(Availability).all():
