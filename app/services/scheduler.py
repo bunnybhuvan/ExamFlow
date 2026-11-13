@@ -476,8 +476,8 @@ def validation_report(db: Session):
     for a in assignments:
         e=exams[a["exam_id"]]; r=rooms[a["room_id"]]
         start=datetime.fromisoformat(a["start"]); end=datetime.fromisoformat(a["end"]); day=start.date().isoformat()
-        if len(allocated_ids)>r.capacity: cap.append({"entity_type":"exam","entity_id":e.id,"message":"Room capacity is below exam enrollment."})
         allocated_ids = set(a.get("student_ids") or enrol.get(e.id,set()))
+        if len(allocated_ids)>r.capacity: cap.append({"entity_type":"exam","entity_id":e.id,"message":"Assigned room capacity is below its allocated student count."})
         assigned_by_exam.setdefault(e.id,[]).extend(sorted(allocated_ids))
         exam_tags = {str(tag).strip().lower().replace(" ", "_").replace("-", "_") for tag in (e.accommodations or [])}
         separate_required = "separate_room" in exam_tags or any("separate_room" in {str(tag).strip().lower().replace(" ", "_").replace("-", "_") for tag in (students[sid].accommodations or [])} for sid in allocated_ids if sid in students)
