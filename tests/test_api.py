@@ -405,7 +405,10 @@ def test_normalized_domain_entities_are_generated_with_valid_relationships(clien
         assert db.query(RoomCapacity).count() == db.query(Room).count() == 10
         assert db.query(Availability).count() > 0
         assert db.query(Accommodation).count() > 0
-        assert db.query(ExamRequirement).count() >= 0
+        assert db.query(ExamRequirement).count() == sum(
+            len(ex.required_equipment or []) + len(ex.accommodations or [])
+            for ex in db.query(Exam).all()
+        )
         assert db.query(ExamCourse).filter(~ExamCourse.course_id.in_(
             db.query(Course.id)
         )).count() == 0
@@ -421,3 +424,95 @@ def test_normalized_domain_entities_are_generated_with_valid_relationships(clien
         assert db.query(Student).count() == 120
     finally:
         db.close()
+
+
+
+def test_dataset_bundle_contains_normalized_tables_manifest_and_ground_truth(client):
+    import io, json, zipfile
+    generated = client.post("/api/v1/datasets/generate", json={
+        "seed": 20261022, "students": 120, "exams": 12, "rooms": 10,
+        "invigilators": 12, "include_edge_cases": True,
+    })
+    assert generated.status_code == 200, generated.text
+    response = client.get("/api/v1/exports/bundle")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/zip")
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        names = set(archive.namelist())
+        assert "manifest.json" in names and "README.txt" in names
+        for table in ("courses", "exam_courses", "exam_requirements", "room_capacities",
+                      "availabilities", "accommodations", "edge_case_labels"):
+            assert f"data/{table}.csv" in names
+            assert f"data/{table}.json" in names
+        manifest = json.loads(archive.read("manifest.json"))
+        assert manifest["tables"]["students"]["rows"] == 120
+        assert manifest["tables"]["edge_case_labels"]["rows"] >= 5
+        assert manifest["ground_truth_separation"].startswith("edge_case_labels")
+
+
+def test_reproducibility_report_has_stable_hashes_for_generated_domain_tables(client):
+    payload = {"seed": 20261022, "students": 120, "exams": 12, "rooms": 10,
+               "invigilators": 12, "include_edge_cases": True}
+    assert client.post("/api/v1/datasets/generate", json=payload).status_code == 200
+    first = client.get("/api/v1/exports/reproducibility").json()
+    assert client.post("/api/v1/datasets/generate", json=payload).status_code == 200
+    second = client.get("/api/v1/exports/reproducibility").json()
+    assert first == second
+    assert first["tables"]["students"]["rows"] == 120
+    assert first["tables"]["exam_courses"]["rows"] == 12
+    assert all(len(item["sha256"]) == 64 for item in first["tables"].values())
+
+
+def test_normalized_availability_and_effective_capacity_drive_schedule(client):
+    from app.models import Availability, RoomCapacity, Accommodation, ExamRequirement, Exam, Student, Room
+    generated = client.post("/api/v1/datasets/generate", json={
+        "seed": 20261022, "students": 80, "exams": 4, "rooms": 4,
+        "invigilators": 4, "include_edge_cases": False,
+    })
+    assert generated.status_code == 200, generated.text
+    db = TestingSession()
+    try:
+        # Remove unrelated constraints so staff availability is the only blocker.
+        db.query(ExamRequirement).delete()
+        db.query(Accommodation).delete()
+        for exam in db.query(Exam).all():
+            exam.required_equipment, exam.accommodations = [], []
+        for student in db.query(Student).all():
+            student.accommodations = []
+        for room in db.query(Room).all():
+            room.capacity = 240
+        for row in db.query(RoomCapacity).all():
+            row.capacity = 240
+        # Every normalized availability row is closed. The legacy JSON remains
+        # populated, so a scheduler that ignores Availability would incorrectly assign.
+        for row in db.query(Availability).all():
+            row.is_available = False
+        db.commit()
+    finally:
+        db.close()
+    payload = {
+        "start_date": "2026-12-07", "end_date": "2027-01-01",
+        "daily_start": "09:00", "daily_end": "18:00",
+        "break_buffer_minutes": 15, "seed": 20261022, "strategy": "balanced",
+    }
+    result = client.post("/api/v1/schedules/generate", json=payload)
+    assert result.status_code == 200, result.text
+    assert client.get("/api/v1/schedules").json() == []
+    assert all(row["reason_code"] == "NO_INVIGILATOR"
+               for row in client.get("/api/v1/schedules/unassigned").json())
+
+    db = TestingSession()
+    try:
+        for row in db.query(Availability).all():
+            row.is_available = True
+        for row in db.query(RoomCapacity).all():
+            row.capacity = 1
+        db.commit()
+    finally:
+        db.close()
+    result = client.post("/api/v1/schedules/generate", json=payload)
+    assert result.status_code == 200, result.text
+    assert client.get("/api/v1/schedules").json() == []
+    assert all(row["reason_code"] == "NO_ROOM_CAPACITY"
+               for row in client.get("/api/v1/schedules/unassigned").json())
+    assert client.get("/api/v1/reports/validation").json()["failed"] == 0

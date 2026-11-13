@@ -71,9 +71,9 @@ This document describes the schema currently implemented by ExamFlow. It deliber
 - EdgeCaseLabel is evaluation-only and intentionally has no foreign key to a single domain table because a label may refer to an exam pair or a student.
 - User has no domain-table foreign keys in the current release.
 
-## Known normalization limitations
+## Runtime normalization status\n\nThe scheduling engine now resolves course names/departments through the Course and ExamCourse relationship, required equipment and exam-level requirements through ExamRequirement, effective-dated room capacities through RoomCapacity, invigilator availability by date through Availability, and student/exam accommodation requirements through Accommodation. Legacy fields are used only as compatibility fallbacks when normalized records do not exist.\n\n## Known normalization limitations
 
-The current deployed-compatible schema still stores Course attributes on Exam, exam equipment/requirements as JSON, Room capacity as one current scalar, Invigilator availability as JSON dates, and accommodations as JSON tags. The problem statement's fully normalized Course, ExamRequirement, RoomCapacity, Availability and Accommodation tables are **not yet implemented**. This is an explicit remaining schema task, not a documented-as-complete feature. Effective-dated capacity/availability history is also not yet represented as separate rows.
+Legacy columns remain for backward compatibility and are populated as mirrors by the generator. Normalized tables are now read by the scheduler when present. Effective-dated room capacity and date-specific staff availability are enforced by the runtime scheduling path.
 
 ## Deterministic data generation and validation
 
@@ -112,3 +112,10 @@ The backend now creates these normalized tables alongside legacy compatibility c
 - `accommodations`: student- or exam-scoped accommodation records with subject and effective-date checks.
 
 The legacy JSON/scalar fields remain in place for backward compatibility with the existing scheduling engine and API. Generated datasets now populate both representations from the same deterministic source records. This is an additive schema change; no existing tables or production rows are dropped. The scheduling engine continues to read compatibility fields in this iteration, so the normalized tables are currently a relationally validated mirror rather than the authoritative runtime read path.
+
+
+## Reproducibility and complete data package
+
+- `GET /api/v1/exports/reproducibility` returns deterministic per-table row counts and SHA-256 hashes for all generated domain tables. It excludes volatile run/audit timestamps.
+- `GET /api/v1/exports/bundle` returns a ZIP with CSV and JSON files for each domain, schedule and ground-truth table, a manifest with row counts and checksums, and a README.
+- `GET /api/v1/exports/sql` remains the portable database schema/data snapshot. The bundle README links the user to this separate SQL export because database SQL is dialect-specific.
