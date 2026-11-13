@@ -609,6 +609,30 @@ def validation_report(db: Session):
     enrol={exam_id:set() for exam_id in exams}
     for row in db.query(Enrollment).all(): enrol.setdefault(row.exam_id,set()).add(row.student_id)
     students={x.id:x for x in db.query(Student).all()}
+    availability_by_person = {}
+    for row in db.query(Availability).all():
+        availability_by_person.setdefault(row.invigilator_id, {})[row.available_date.isoformat()] = row.is_available
+    normalized_accommodations_by_student, normalized_accommodations_by_exam = {}, {}
+    for row in db.query(Accommodation).all():
+        if row.student_id:
+            normalized_accommodations_by_student.setdefault(row.student_id, []).append(row.accommodation_type)
+        if row.exam_id:
+            normalized_accommodations_by_exam.setdefault(row.exam_id, []).append(row.accommodation_type)
+    normalized_requirements_by_exam = {}
+    for row in db.query(ExamRequirement).all():
+        normalized_requirements_by_exam.setdefault(row.exam_id, []).append(row)
+    for student_id, tags in normalized_accommodations_by_student.items():
+        if student_id in students:
+            students[student_id].accommodations = sorted(set(tags))
+    for exam_id, rows in normalized_requirements_by_exam.items():
+        if exam_id in exams:
+            exams[exam_id].required_equipment = [r.requirement_value for r in rows
+                if r.requirement_type == "equipment" and r.required]
+            exams[exam_id].accommodations = [r.requirement_value for r in rows
+                if r.requirement_type == "accommodation" and r.required]
+    for exam_id, tags in normalized_accommodations_by_exam.items():
+        if exam_id in exams:
+            exams[exam_id].accommodations = sorted(set(exams[exam_id].accommodations or []) | set(tags))
     student_schedule={}; room_schedule={}; inv_schedule={}
     checks=[]
     def add(name,category,violations,description,severity="high",details=None):
@@ -644,8 +668,12 @@ def validation_report(db: Session):
             if _overlap(start,end,prev[0],prev[1]): room_conf.append({"entity_type":"room","entity_id":r.id,"message":"Room has overlapping assignments."})
         room_schedule.setdefault(r.id,[]).append((start,end))
         for vid in a["invigilator_ids"]:
-            if vid in invs and day not in (invs[vid].available_days or []):
-                inv_avail.append({"entity_type":"invigilator","entity_id":vid,"message":"Invigilator is assigned on a day they are not available."})
+            if vid in invs:
+                normalized_dates = availability_by_person.get(vid)
+                is_available = (bool(normalized_dates.get(day, False)) if normalized_dates is not None
+                                 else day in (invs[vid].available_days or []))
+                if not is_available:
+                    inv_avail.append({"entity_type":"invigilator","entity_id":vid,"message":"Invigilator is assigned on a day they are not available."})
             for prev in inv_schedule.get(vid,[]):
                 if _overlap(start,end,prev[0],prev[1]): inv_conf.append({"entity_type":"invigilator","entity_id":vid,"message":"Invigilator is double-booked."})
             inv_schedule.setdefault(vid,[]).append((start,end))
