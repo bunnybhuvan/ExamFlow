@@ -54,7 +54,22 @@
 
 ### Remaining environment limitations
 
-- **Manual TypeScript check not run:** TypeScript is installed, but this sandbox explicitly prohibits manual project typechecks. The automatic harness's `build OK` is the available diagnostic, not a claim that an independent TypeScript command ran.
-- **Manual production build not run:** `bun run build` exists but the sandbox explicitly prohibits manual project builds. No independent production artifact, published runtime, or deployed Worker was tested.
-- Browser checks exercised the actual, explicitly labelled demo state because no real FastAPI process is running. Real API integration, SQLite data, backend tests, and CORS remain unverified; earlier intercepted API tests are historical evidence only.
+- **Lovable sandbox TypeScript check not run:** The Lovable sandbox prohibited manual typechecks. The same project was subsequently checked in GitHub Actions using `bunx tsc --noEmit` and passed.
+- **Lovable sandbox production build not run:** The Lovable sandbox prohibited manual builds. GitHub Actions subsequently ran `bun run build` successfully and produced the configured Cloudflare Worker build output. This is a build result, not a deployment or live-runtime test.
+- Browser checks exercised the actual, explicitly labelled demo state because no real FastAPI process was running in Lovable. Backend API tests were subsequently executed in GitHub Actions, including the full-scale dataset/schedule smoke test. A live deployed API, persistent production database, production CORS, authentication and authorization remain unverified.
 - Browser scripts and command logs under `/tmp` are sandbox-local verification artifacts, not persistent repository test files. The full frontend Vitest suite remains in the repository.
+
+## Repository-level CI verification — 13 November 2026
+
+GitHub Actions run [#43439565912](https://github.com/bunnybhuvan/ExamFlow/actions/runs/43439565912) completed successfully on commit `484b0f522acc0726116a1b298ea94f94ba1add2f`.
+
+- Backend job: **6 Pytest tests passed** (12 deprecation/runtime warnings). The new faculty-scale smoke test generated 5,000 students, 300 exams, 100 rooms and 200 invigilators, generated a schedule, and asserted zero hard-constraint validation violations.
+- Frontend job: **41 Vitest tests passed across 6 files**.
+- `bun install --frozen-lockfile`: passed.
+- `bun run lint`: passed.
+- `bunx eslint . --max-warnings 0`: passed with zero warnings.
+- `bunx prettier --check "src/**/*.{ts,tsx,css}" "vite.config.ts" "vitest.config.ts" "eslint.config.js"`: passed. This deliberately scopes the formatter gate to frontend source/config files; repository documentation and JSON metadata are not included in that check.
+- `bunx tsc --noEmit`: passed.
+- `bun run build`: passed; Vite/TanStack/Nitro produced the configured Cloudflare Worker build output.
+
+This confirms the repository's automated test, lint, source-format, typecheck and build gates. It does not establish a public backend deployment or a live browser-to-API integration test.
