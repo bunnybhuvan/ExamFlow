@@ -98,3 +98,17 @@ The current deployed-compatible schema still stores Course attributes on Exam, e
 ## Operational traceability
 
 Dataset regeneration replaces the active synthetic master/transaction rows, but it must not delete prior ScheduleRun or ScheduleEvent records. Each completed schedule run stores a compact snapshot of assignment IDs, room/staff/student allocation, time interval, unassigned reason codes and explanations in its audit event. The active assignments endpoint continues to represent only the latest schedule.
+
+
+## Normalized relational entities (added in the domain-model extension)
+
+The backend now creates these normalized tables alongside legacy compatibility columns:
+
+- `courses`: course master records keyed by course code.
+- `exam_courses`: explicit exam-to-course relationship with foreign keys to exams and courses.
+- `exam_requirements`: one row per required equipment or accommodation requirement.
+- `room_capacities`: effective-dated capacity records with positive-capacity and date-range checks.
+- `availabilities`: one row per invigilator/date with uniqueness and a foreign key.
+- `accommodations`: student- or exam-scoped accommodation records with subject and effective-date checks.
+
+The legacy JSON/scalar fields remain in place for backward compatibility with the existing scheduling engine and API. Generated datasets now populate both representations from the same deterministic source records. This is an additive schema change; no existing tables or production rows are dropped. The scheduling engine continues to read compatibility fields in this iteration, so the normalized tables are currently a relationally validated mirror rather than the authoritative runtime read path.
