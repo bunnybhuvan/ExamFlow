@@ -214,7 +214,7 @@ def generate_dataset(db: Session, p):
         after={"seed":p.seed,"students":len(students),"exams":len(exams),"rooms":len(rooms),"invigilators":len(invigilators),"edge_cases":bool(p.include_edge_cases)})
     db.commit()
     return {"students":len(students),"exams":len(exams),"rooms":len(rooms),"invigilators":len(invigilators),
-            "enrollments":len(enrollments),"edge_cases":bool(p.include_edge_cases),"seed":p.seed}
+            "enrollments":db.query(Enrollment).count(),"edge_cases":bool(p.include_edge_cases),"seed":p.seed}
 
 def _overlap(a_start, a_end, b_start, b_end, buffer=0):
     pad = timedelta(minutes=buffer)
@@ -241,6 +241,63 @@ def generate_schedule(db: Session, p):
         enrollment_map.setdefault(row.exam_id, []).append(row.student_id)
     student_by_id = {s.id:s for s in students}
     inv_by_id = {v.id:v for v in invigilators}
+
+    # Resolve normalized records once per run. Legacy fields are fallback only for
+    # manually-created records that predate normalized data.
+    course_by_id = {row.id: row for row in db.query(Course).all()}
+    exam_course = {row.exam_id: row.course_id for row in db.query(ExamCourse).all()}
+    requirements_by_exam = {}
+    for row in db.query(ExamRequirement).all():
+        requirements_by_exam.setdefault(row.exam_id, []).append(row)
+    accommodations_by_student, accommodations_by_exam = {}, {}
+    for row in db.query(Accommodation).all():
+        if row.student_id:
+            accommodations_by_student.setdefault(row.student_id, []).append(row)
+        if row.exam_id:
+            accommodations_by_exam.setdefault(row.exam_id, []).append(row)
+    availability_by_person = {}
+    for row in db.query(Availability).all():
+        availability_by_person.setdefault(row.invigilator_id, {})[row.available_date.isoformat()] = row.is_available
+    capacities_by_room = {}
+    for row in db.query(RoomCapacity).order_by(RoomCapacity.effective_from.desc()).all():
+        capacities_by_room.setdefault(row.room_id, []).append(row)
+
+    for ex in exams:
+        course_id = exam_course.get(ex.id)
+        if course_id in course_by_id:
+            ex.course_code = course_id
+            ex.course_name = course_by_id[course_id].name
+            ex.department = course_by_id[course_id].department
+        normalized_requirements = requirements_by_exam.get(ex.id, [])
+        if normalized_requirements:
+            ex.required_equipment = [r.requirement_value for r in normalized_requirements
+                                     if r.requirement_type == "equipment" and r.required]
+            ex.accommodations = [r.requirement_value for r in normalized_requirements
+                                 if r.requirement_type == "accommodation" and r.required]
+        if ex.id in accommodations_by_exam:
+            ex.accommodations = sorted(set(ex.accommodations or []) | {
+                row.accommodation_type for row in accommodations_by_exam[ex.id]
+                if row.effective_from <= p.end_date and (row.effective_to is None or row.effective_to >= p.start_date)
+            })
+    for student in students:
+        if student.id in accommodations_by_student:
+            student.accommodations = sorted({
+                row.accommodation_type for row in accommodations_by_student[student.id]
+                if row.effective_from <= p.end_date and (row.effective_to is None or row.effective_to >= p.start_date)
+            })
+
+    def capacity_at(room, on_date):
+        records = capacities_by_room.get(room.id, [])
+        for record in records:
+            if record.effective_from <= on_date and (record.effective_to is None or record.effective_to >= on_date):
+                return record.capacity
+        return room.capacity
+
+    def invigilator_available(person, on_date):
+        records = availability_by_person.get(person.id)
+        if records is not None:
+            return bool(records.get(on_date.isoformat(), False))
+        return on_date.isoformat() in (person.available_days or [])
     room_assignments, inv_assignments, student_assignments = {}, {}, {}
     day_load, student_day_load = {}, {}
     day_start, day_end = _parse_time(p.daily_start), _parse_time(p.daily_end)
@@ -326,7 +383,7 @@ def generate_schedule(db: Session, p):
                 for room, cohort in groups:
                     needed = 2 if len(cohort) >= 150 else 1
                     staff = [person for person in invigilators if person.id not in used_staff
-                        and day_key in (person.available_days or [])
+                        and invigilator_available(person, start_dt.date())
                         and person.assigned_duties < person.max_duties
                         and not any(_overlap(start_dt,end_dt,x,y) for x,y in inv_assignments.get(person.id,[]))]
                     staff.sort(key=lambda person:(person.assigned_duties,person.id))
@@ -379,13 +436,13 @@ def generate_schedule(db: Session, p):
         if not candidate_dates:
             unassigned.append((ex,"NO_VALID_TIME_SLOT","No weekday time slot falls inside the exam scheduling window."))
             ex.status="unassigned"; continue
-        if not any(r.capacity >= ex.enrollment for r in rooms):
+        if not any(capacity_at(r, slot.date()) >= ex.enrollment for r in rooms for slot in candidate_dates):
             unassigned.append((ex,"NO_ROOM_CAPACITY","No available room can seat all enrolled students."))
             ex.status="unassigned"; continue
-        if needs_access and not any(r.accessible and r.capacity >= ex.enrollment for r in rooms):
+        if needs_access and not any(r.accessible and capacity_at(r, slot.date()) >= ex.enrollment for r in rooms for slot in candidate_dates):
             unassigned.append((ex,"ACCOMMODATION_CONFLICT","No room satisfies the accessibility accommodation and capacity requirements."))
             ex.status="unassigned"; continue
-        if required_equipment and not any(required_equipment.issubset(set(r.equipment or [])) and r.capacity >= ex.enrollment for r in rooms):
+        if required_equipment and not any(required_equipment.issubset(set(r.equipment or [])) and capacity_at(r, slot.date()) >= ex.enrollment for r in rooms for slot in candidate_dates):
             code = "ACCOMMODATION_CONFLICT" if needs_screen_reader else "EQUIPMENT_UNAVAILABLE"
             reason = "No sufficiently large room provides the computer equipment required by a screen-reader accommodation." if needs_screen_reader else "No sufficiently large room provides all required equipment."
             unassigned.append((ex,code,reason))
@@ -396,7 +453,7 @@ def generate_schedule(db: Session, p):
             end_dt = start_dt + timedelta(minutes=effective_duration)
             if end_dt.time() > day_end: continue
             day_key = start_dt.date().isoformat()
-            candidate_rooms = sorted([r for r in rooms if r.capacity >= ex.enrollment
+            candidate_rooms = sorted([r for r in rooms if capacity_at(r, start_dt.date()) >= ex.enrollment
                 and (not needs_access or r.accessible)
                 and required_equipment.issubset(set(r.equipment or []))],
                 key=lambda r:(r.capacity, r.id))
@@ -415,7 +472,7 @@ def generate_schedule(db: Session, p):
                 if cohort_conflict:
                     saw_student=True; continue
                 needed = 2 if ex.enrollment >= 150 else 1
-                available = [v for v in invigilators if day_key in (v.available_days or [])
+                available = [v for v in invigilators if invigilator_available(v, start_dt.date())
                     and v.assigned_duties < v.max_duties
                     and not any(_overlap(start_dt,end_dt,a,b) for a,b in inv_assignments.get(v.id,[]))]
                 available.sort(key=lambda v:(v.assigned_duties,v.id))
@@ -480,6 +537,14 @@ def generate_schedule(db: Session, p):
         items.append({"exam_id":ex.id,"course_code":ex.course_code,"course_name":ex.course_name,"reason_code":code,"reason":reason})
     return {"run_id":run_id,"scheduled":len(assigned),"unassigned":len(unassigned),"duration_ms":duration_ms,"unassigned_items":items}
 
+def _room_capacity_for_date(db: Session, room_id: str, on_date: date, fallback: int) -> int:
+    record = (db.query(RoomCapacity)
+        .filter(RoomCapacity.room_id == room_id, RoomCapacity.effective_from <= on_date)
+        .filter((RoomCapacity.effective_to.is_(None)) | (RoomCapacity.effective_to >= on_date))
+        .order_by(RoomCapacity.effective_from.desc()).first())
+    return record.capacity if record else fallback
+
+
 def assignment_rows(db: Session):
     exams={x.id:x for x in db.query(Exam).all()}
     rooms={x.id:x for x in db.query(Room).all()}
@@ -489,7 +554,7 @@ def assignment_rows(db: Session):
         out.append({"id":a.id,"exam_id":e.id,"course_code":e.course_code,"course_name":e.course_name,
             "room_id":r.id,"room_name":r.name,"invigilator_ids":a.invigilator_ids,
             "student_ids":a.student_ids or [],"start":a.start.isoformat(),"end":a.end.isoformat(),
-            "enrolled":len(a.student_ids or []) or e.enrollment,"capacity":r.capacity,"status":a.status})
+            "enrolled":len(a.student_ids or []) or e.enrollment,"capacity":_room_capacity_for_date(db, r.id, a.start.date(), r.capacity),"status":a.status})
     return out
 
 def unassigned_rows(db: Session):
@@ -556,7 +621,7 @@ def validation_report(db: Session):
         e=exams[a["exam_id"]]; r=rooms[a["room_id"]]
         start=datetime.fromisoformat(a["start"]); end=datetime.fromisoformat(a["end"]); day=start.date().isoformat()
         allocated_ids = set(a.get("student_ids") or enrol.get(e.id,set()))
-        if len(allocated_ids)>r.capacity: cap.append({"entity_type":"exam","entity_id":e.id,"message":"Assigned room capacity is below its allocated student count."})
+        if len(allocated_ids)>_room_capacity_for_date(db, r.id, start.date(), r.capacity): cap.append({"entity_type":"exam","entity_id":e.id,"message":"Assigned room capacity is below its allocated student count."})
         assigned_by_exam.setdefault(e.id,[]).extend(sorted(allocated_ids))
         exam_tags = {str(tag).strip().lower().replace(" ", "_").replace("-", "_") for tag in (e.accommodations or [])}
         separate_required = bool(exam_tags & {"separate_room", "individual_room"}) or any(bool({"separate_room", "individual_room"} & {str(tag).strip().lower().replace(" ", "_").replace("-", "_") for tag in (students[sid].accommodations or [])}) for sid in allocated_ids if sid in students)
