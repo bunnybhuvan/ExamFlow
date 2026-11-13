@@ -117,5 +117,5 @@ The legacy JSON/scalar fields remain in place for backward compatibility with th
 ## Reproducibility and complete data package
 
 - `GET /api/v1/exports/reproducibility` returns deterministic per-table row counts and SHA-256 hashes for all generated domain tables. It excludes volatile run/audit timestamps.
-- `GET /api/v1/exports/bundle` returns a ZIP with CSV and JSON files for each domain, schedule and ground-truth table, a manifest with row counts and checksums, and a README.
+- `GET /api/v1/exports/bundle` returns a ZIP with CSV, JSON and SQL exports for each domain, schedule and ground-truth table, a manifest with the fixed seed, generator command, source provenance, row counts and checksums, and a README.
 - `GET /api/v1/exports/sql` remains the portable database schema/data snapshot. The bundle README links the user to this separate SQL export because database SQL is dialect-specific.
