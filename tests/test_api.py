@@ -273,3 +273,37 @@ def test_auth_config_and_password_login(client):
         "email": "admin@example.test", "password": "incorrect-password"
     })
     assert invalid.status_code == 401
+
+
+def test_role_based_access_control_enforces_read_only_viewers(client, monkeypatch):
+    from app.models import User
+    from app.security import hash_password
+    import app.security as security
+
+    monkeypatch.setenv("EXAMFLOW_AUTH_ENABLED", "true")
+    monkeypatch.setenv("EXAMFLOW_AUTH_SECRET", "unit-test-secret-" + "x" * 40)
+    monkeypatch.setattr(security, "SessionLocal", TestingSession)
+    db = TestingSession()
+    try:
+        db.add(User(id="USR-VIEWER", email="viewer@example.test",
+            password_hash=hash_password("Strong-Viewer-Password-2026"),
+            role="viewer", active=True))
+        db.commit()
+    finally:
+        db.close()
+
+    assert client.get("/api/v1/students").status_code == 401
+    login = client.post("/api/v1/auth/login", json={
+        "email": "viewer@example.test", "password": "Strong-Viewer-Password-2026"
+    })
+    assert login.status_code == 200, login.text
+    headers = {"Authorization": "Bearer " + login.json()["access_token"]}
+    assert client.get("/api/v1/students", headers=headers).status_code == 200
+    denied = client.post("/api/v1/datasets/generate", headers=headers, json={
+        "students": 1, "exams": 1, "rooms": 1, "invigilators": 1
+    })
+    assert denied.status_code == 403
+    assert client.post("/api/v1/auth/change-password", headers=headers, json={
+        "current_password": "Strong-Viewer-Password-2026",
+        "new_password": "Even-Stronger-Password-2026"
+    }).status_code == 200
