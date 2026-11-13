@@ -32,3 +32,30 @@ jobs:
       - run: bunx vitest run
       - run: bunx tsc --noEmit
       - run: bun run build
+
+  postgres-backup-restore:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: examflow_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d examflow_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Restore a real PostgreSQL SQL export into an isolated schema
+        env:
+          EXAMFLOW_TEST_POSTGRES_URL: postgresql://postgres@localhost:5432/examflow_test
+        run: python scripts/test_postgres_backup_restore.py
