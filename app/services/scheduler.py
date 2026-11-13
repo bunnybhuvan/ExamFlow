@@ -176,7 +176,6 @@ def generate_dataset(db: Session, p):
         if course is None:
             course = Course(id=exam.course_code, name=exam.course_name, department=exam.department)
             course_by_code[exam.course_code] = course
-        db.add(ExamCourse(exam_id=exam.id, course_id=exam.course_code))
         for index, equipment in enumerate(exam.required_equipment or []):
             db.add(ExamRequirement(id=f"REQ-{exam.id}-EQ-{index+1:03d}",
                 exam_id=exam.id, requirement_type="equipment", requirement_value=equipment, required=True))
@@ -184,6 +183,9 @@ def generate_dataset(db: Session, p):
             db.add(ExamRequirement(id=f"REQ-{exam.id}-AC-{index+1:03d}",
                 exam_id=exam.id, requirement_type="accommodation", requirement_value=str(tag), required=True))
     db.add_all(course_by_code.values())
+    db.flush()
+    for exam in exams:
+        db.add(ExamCourse(exam_id=exam.id, course_id=exam.course_code))
 
     for room in rooms:
         db.add(RoomCapacity(id=f"CAP-{room.id}-20260101", room_id=room.id,
