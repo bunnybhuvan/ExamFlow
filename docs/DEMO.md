@@ -8,7 +8,7 @@
 6. Open Unassigned / Conflicts and explain reason codes such as NO_ROOM_CAPACITY and NO_INVIGILATOR.
 7. Open Validation and show the independent hard-constraint checks.
 8. Enable labelled edge cases, regenerate the dataset, rerun the schedule and show the labels through GET /api/v1/edge-cases. Explain that the solver never reads this table.
-9. Open Audit Log and export CSV or JSON.
+9. Open Audit Log and export CSV, JSON or a complete SQLite SQL dump. The SQL dump includes schema, indexes and stored data and can be restored with SQLite.
 10. Close with the limitation: one room per exam; separate-room accommodations are explicitly marked unsupported rather than silently violated.
 
 Useful URLs after local startup:
