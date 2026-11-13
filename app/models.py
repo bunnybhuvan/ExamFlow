@@ -1,5 +1,5 @@
 from datetime import date, datetime, timezone
-from sqlalchemy import String, Integer, Date, DateTime, Boolean, Float, ForeignKey, JSON, Text
+from sqlalchemy import String, Integer, Date, DateTime, Boolean, Float, ForeignKey, JSON, Text, UniqueConstraint, CheckConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from .database import Base
 
@@ -111,3 +111,65 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="viewer")
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class Course(Base):
+    """Normalized course master record; one course may have one or more exam offerings."""
+    __tablename__ = "courses"
+    id: Mapped[str] = mapped_column(String(30), primary_key=True)
+    name: Mapped[str] = mapped_column(String(180), nullable=False)
+    department: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class ExamCourse(Base):
+    """Explicit exam-to-course relationship, retained separately from legacy exam labels."""
+    __tablename__ = "exam_courses"
+    exam_id: Mapped[str] = mapped_column(ForeignKey("exams.id", ondelete="CASCADE"), primary_key=True)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), nullable=False, unique=True)
+
+
+class ExamRequirement(Base):
+    __tablename__ = "exam_requirements"
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    exam_id: Mapped[str] = mapped_column(ForeignKey("exams.id", ondelete="CASCADE"), nullable=False, index=True)
+    requirement_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    requirement_value: Mapped[str] = mapped_column(String(120), nullable=False)
+    required: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    __table_args__ = (UniqueConstraint("exam_id", "requirement_type", "requirement_value",
+                                       name="uq_exam_requirement_value"),)
+
+
+class RoomCapacity(Base):
+    __tablename__ = "room_capacities"
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    room_id: Mapped[str] = mapped_column(ForeignKey("rooms.id", ondelete="CASCADE"), nullable=False, index=True)
+    capacity: Mapped[int] = mapped_column(Integer, nullable=False)
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    __table_args__ = (CheckConstraint("capacity > 0", name="ck_room_capacity_positive"),
+                      CheckConstraint("effective_to IS NULL OR effective_to >= effective_from",
+                                      name="ck_room_capacity_dates"))
+
+
+class Availability(Base):
+    __tablename__ = "availabilities"
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    invigilator_id: Mapped[str] = mapped_column(ForeignKey("invigilators.id", ondelete="CASCADE"), nullable=False, index=True)
+    available_date: Mapped[date] = mapped_column(Date, nullable=False)
+    is_available: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    __table_args__ = (UniqueConstraint("invigilator_id", "available_date", name="uq_invigilator_availability_date"),)
+
+
+class Accommodation(Base):
+    __tablename__ = "accommodations"
+    id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    student_id: Mapped[str | None] = mapped_column(ForeignKey("students.id", ondelete="CASCADE"), nullable=True, index=True)
+    exam_id: Mapped[str | None] = mapped_column(ForeignKey("exams.id", ondelete="CASCADE"), nullable=True, index=True)
+    accommodation_type: Mapped[str] = mapped_column(String(60), nullable=False)
+    details: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    __table_args__ = (CheckConstraint("student_id IS NOT NULL OR exam_id IS NOT NULL",
+                                      name="ck_accommodation_has_subject"),
+                      CheckConstraint("effective_to IS NULL OR effective_to >= effective_from",
+                                      name="ck_accommodation_dates"))
