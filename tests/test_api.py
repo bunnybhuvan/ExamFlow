@@ -405,7 +405,10 @@ def test_normalized_domain_entities_are_generated_with_valid_relationships(clien
         assert db.query(RoomCapacity).count() == db.query(Room).count() == 10
         assert db.query(Availability).count() > 0
         assert db.query(Accommodation).count() > 0
-        assert db.query(ExamRequirement).count() >= 0
+        assert db.query(ExamRequirement).count() == sum(
+            len(ex.required_equipment or []) + len(ex.accommodations or [])
+            for ex in db.query(Exam).all()
+        )
         assert db.query(ExamCourse).filter(~ExamCourse.course_id.in_(
             db.query(Course.id)
         )).count() == 0
@@ -469,21 +472,36 @@ def test_normalized_availability_and_effective_capacity_drive_schedule(client):
     assert generated.status_code == 200, generated.text
     db = TestingSession()
     try:
-        # Close every normalized availability row for the first invigilator.
-        person = db.query(Availability).first().invigilator_id
-        for row in db.query(Availability).filter_by(invigilator_id=person).all():
+        # Every normalized availability row is closed. The legacy JSON remains
+        # populated, so a scheduler that ignores Availability would incorrectly assign.
+        for row in db.query(Availability).all():
             row.is_available = False
-        # Make all room capacity records too small for the largest exam.
+        db.commit()
+    finally:
+        db.close()
+    payload = {
+        "start_date": "2026-12-07", "end_date": "2027-01-01",
+        "daily_start": "09:00", "daily_end": "18:00",
+        "break_buffer_minutes": 15, "seed": 20261022, "strategy": "balanced",
+    }
+    result = client.post("/api/v1/schedules/generate", json=payload)
+    assert result.status_code == 200, result.text
+    assert client.get("/api/v1/schedules").json() == []
+    assert all(row["reason_code"] == "NO_INVIGILATOR"
+               for row in client.get("/api/v1/schedules/unassigned").json())
+
+    db = TestingSession()
+    try:
+        for row in db.query(Availability).all():
+            row.is_available = True
         for row in db.query(RoomCapacity).all():
             row.capacity = 1
         db.commit()
     finally:
         db.close()
-    result = client.post("/api/v1/schedules/generate", json={
-        "start_date": "2026-12-07", "end_date": "2027-01-01",
-        "daily_start": "09:00", "daily_end": "18:00",
-        "break_buffer_minutes": 15, "seed": 20261022, "strategy": "balanced",
-    })
+    result = client.post("/api/v1/schedules/generate", json=payload)
     assert result.status_code == 200, result.text
-    validation = client.get("/api/v1/reports/validation").json()
-    assert validation["failed"] == 0
+    assert client.get("/api/v1/schedules").json() == []
+    assert all(row["reason_code"] == "NO_ROOM_CAPACITY"
+               for row in client.get("/api/v1/schedules/unassigned").json())
+    assert client.get("/api/v1/reports/validation").json()["failed"] == 0
