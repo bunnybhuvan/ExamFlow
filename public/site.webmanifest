@@ -1,0 +1,16 @@
+{
+  "name": "ExamFlow",
+  "short_name": "ExamFlow",
+  "description": "Intelligent examination scheduling and operations platform.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f1424",
+  "theme_color": "#0f1424",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
