@@ -368,7 +368,7 @@ def metrics_report(db: Session):
 def validation_report(db: Session):
     assignments=assignment_rows(db); exams={x.id:x for x in db.query(Exam).all()}
     rooms={x.id:x for x in db.query(Room).all()}; invs={x.id:x for x in db.query(Invigilator).all()}
-    enrol={e.id:set() for e in exams}
+    enrol={exam_id:set() for exam_id in exams}
     for row in db.query(Enrollment).all(): enrol.setdefault(row.exam_id,set()).add(row.student_id)
     students={x.id:x for x in db.query(Student).all()}
     student_schedule={}; room_schedule={}; inv_schedule={}
