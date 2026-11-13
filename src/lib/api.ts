@@ -65,6 +65,11 @@ async function request<T>(
       signal: ctrl.signal,
       headers: {
         Accept: "application/json",
+        ...(typeof window !== "undefined" &&
+        localStorage.getItem("examflow_access_token") &&
+        !path.startsWith("/auth/login")
+          ? { Authorization: `Bearer ${localStorage.getItem("examflow_access_token")}` }
+          : {}),
         ...(rest.body ? { "Content-Type": "application/json" } : {}),
         ...rest.headers,
       },
@@ -132,6 +137,25 @@ const post = <T>(p: string, body?: unknown, timeoutMs?: number) =>
   request<T>(p, { method: "POST", body: body ? JSON.stringify(body) : undefined, timeoutMs });
 
 export const api = {
+  authConfig: () => get<{ enabled: boolean }>("/auth/config"),
+  login: async (email: string, password: string) => {
+    const result = await post<{
+      access_token: string;
+      token_type: string;
+      expires_in: number;
+      user: { id: string; email: string; role: string };
+    }>("/auth/login", { email, password });
+    if (typeof window !== "undefined") {
+      localStorage.setItem("examflow_access_token", result.access_token);
+    }
+    return result.user;
+  },
+  me: () => get<{ id: string; email: string; role: string }>("/auth/me"),
+  logout: () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("examflow_access_token");
+    }
+  },
   health: () => read("/health", healthResponse),
   healthDatabase: () => read("/health/database", healthResponse),
   generateDataset: async (p: GenerateDatasetParams) =>
@@ -162,6 +186,10 @@ export const api = {
     try {
       res = await fetch(`${API_BASE_URL}/exports/${format}`, {
         signal: AbortSignal.timeout(30000),
+        headers:
+          typeof window !== "undefined" && localStorage.getItem("examflow_access_token")
+            ? { Authorization: `Bearer ${localStorage.getItem("examflow_access_token")}` }
+            : {},
       });
     } catch {
       throw new ApiError(`Cannot reach API at ${API_BASE_URL}`, null);
