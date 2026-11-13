@@ -136,7 +136,7 @@ See [AUDIT.md](./AUDIT.md) for the frontend audit, confirmed repairs, test evide
 ## Data and reproducibility
 
 - Stable identifiers: `STU-000001`, `EXAM-2026-000001`, `ROOM-000001`, `INV-000001`, and `ASN-<exam>-<room>`.
-- Dataset generation is seeded and replaces the current synthetic dataset in a single operation.\n- The reproducibility endpoint compares canonical table snapshots using row counts and SHA-256 checksums.\n- The dataset bundle includes CSV/JSON for all core and evaluation tables plus a checksummed manifest; SQL is available as a separate export.
+- Dataset generation is seeded and replaces the current synthetic dataset in a single operation.\n- The reproducibility endpoint compares canonical table snapshots using row counts and SHA-256 checksums.\n- The dataset bundle includes CSV/JSON for all core and evaluation tables, a portable SQL snapshot, generator command, source provenance and a checksummed manifest.
 - Foreign keys are enabled in SQLite.
 - The SQLite database, virtual environment, node modules and build artifacts are excluded from Git.
 - No API keys or production credentials are required for local development.
