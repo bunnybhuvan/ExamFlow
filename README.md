@@ -124,6 +124,12 @@ Frontend tests: `npm test`.
 - `docs/AI_USAGE.md` — transparent AI tool and prompt record.
 - `docs/DEMO.md` — suggested five-minute challenge demonstration.
 
+## Quality gates
+
+GitHub Actions runs the backend Pytest suite and the frontend quality pipeline on every push to `main` and every pull request. The frontend pipeline installs the pinned Bun dependencies, runs ESLint with zero warnings, checks Prettier formatting, runs Vitest, runs the TypeScript compiler, and builds the production bundle.
+
+See [AUDIT.md](./AUDIT.md) for the frontend audit, confirmed repairs, test evidence and remaining deployment limitations.
+
 ## Data and reproducibility
 
 - Stable identifiers: `STU-000001`, `EXAM-2026-000001`, `ROOM-000001`, `INV-000001`, and `ASN-<exam>-<room>`.
