@@ -143,4 +143,4 @@ See [AUDIT.md](./AUDIT.md) for the frontend audit, confirmed repairs, test evide
 
 ## Scope notes
 
-This is a demonstrable scheduling MVP, not a university SIS integration. It schedules each exam in one room and uses local SQLite for reproducible evaluation. The free hosted deployment uses external PostgreSQL because Render's free filesystem is ephemeral. Production use still requires authentication, authorization, backups and institution-specific policies.
+This is a demonstrable scheduling MVP, not a university SIS integration. It schedules each exam in one room and uses local SQLite for reproducible evaluation. The free hosted deployment uses external PostgreSQL because Render's free filesystem is ephemeral. Production deployment now includes optional bearer-token authentication, role-based access controls, separate-room allocation support, and documented recovery procedures. Institution-specific retention, disaster-recovery objectives and operational policies still require administrator approval.
