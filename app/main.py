@@ -328,7 +328,8 @@ def export_dataset_bundle(db: Session=Depends(get_db)):
             "manifest.json records the fixed seed, generator command, source provenance, row counts and SHA-256 checksums.\\n"
             "edge_case_labels contains evaluation ground truth and must not be used as a scheduler feature.\\n"
             "The SQL file contains schema and data for the active database snapshot.\\n"
-        ))    return Response(content=archive_buffer.getvalue(), media_type="application/zip",
+        ))
+    return Response(content=archive_buffer.getvalue(), media_type="application/zip",
         headers={"Content-Disposition": 'attachment; filename="examflow-dataset-bundle.zip"'})
 
 
