@@ -255,7 +255,7 @@ def generate_schedule(db: Session, p):
                 used_rooms = set()
                 valid = True
                 for sid in sorted(separate_ids):
-                    tags = {str(tag).strip().lower().replace(" ", "_").replace("-", "_") for tag in (student_by_id[sid].accommodations or [])}
+                    tags = exam_accommodation_tags | {str(tag).strip().lower().replace(" ", "_").replace("-", "_") for tag in (student_by_id[sid].accommodations or [])}
                     accessible = bool(tags & {"accessible_seating","wheelchair","accessible"})
                     choices = [room for room in free_rooms if room.id not in used_rooms and (not accessible or room.accessible)]
                     if not choices:
@@ -265,7 +265,7 @@ def generate_schedule(db: Session, p):
                     groups.append((room,[sid]))
                     used_rooms.add(room.id)
                 if valid and regular_ids:
-                    accessible = any(
+                    accessible = bool(exam_accommodation_tags & {"accessible_seating","wheelchair","accessible"}) or any(
                         {str(tag).strip().lower().replace(" ", "_").replace("-", "_") for tag in (student_by_id[sid].accommodations or [])}
                         & {"accessible_seating","wheelchair","accessible"} for sid in regular_ids)
                     choices = [room for room in free_rooms if room.id not in used_rooms
