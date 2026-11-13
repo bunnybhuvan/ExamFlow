@@ -77,6 +77,7 @@ def generate_dataset(db: Session, p):
                     db.add(Enrollment(student_id=sid, exam_id=exams[0].id))
                 if not db.query(Enrollment).filter_by(student_id=sid, exam_id=exams[1].id).first():
                     db.add(Enrollment(student_id=sid, exam_id=exams[1].id))
+            db.flush()
             exams[0].enrollment = db.query(Enrollment).filter_by(exam_id=exams[0].id).count()
             exams[1].enrollment = db.query(Enrollment).filter_by(exam_id=exams[1].id).count()
             labels.append(EdgeCaseLabel(id="EDGE-STUDENT-OVERLAP", case_code="STUDENT_OVERLAP",
@@ -88,6 +89,8 @@ def generate_dataset(db: Session, p):
             for student in students[:min(len(students), max(r.capacity for r in rooms)+1)]:
                 if not db.query(Enrollment).filter_by(student_id=student.id, exam_id=target.id).first():
                     db.add(Enrollment(student_id=student.id, exam_id=target.id))
+            db.flush()
+            db.flush()
             target.enrollment = db.query(Enrollment).filter_by(exam_id=target.id).count()
             labels.append(EdgeCaseLabel(id="EDGE-ROOM-CAPACITY", case_code="INSUFFICIENT_ROOM_CAPACITY",
                 entity_type="exam", entity_id=target.id, expected_detection="No room has sufficient capacity; exam must remain unassigned."))
@@ -122,6 +125,7 @@ def generate_dataset(db: Session, p):
             rows = db.query(Enrollment).filter_by(exam_id=accommodation_exam.id).order_by(Enrollment.student_id).all()
             for row in rows[80:]:
                 db.delete(row)
+            db.flush()
             accommodation_exam.enrollment = db.query(Enrollment).filter_by(exam_id=accommodation_exam.id).count()
             for room in rooms:
                 room.accessible = False
@@ -153,6 +157,7 @@ def generate_dataset(db: Session, p):
                 rows = db.query(Enrollment).filter_by(exam_id=ex.id).order_by(Enrollment.student_id).all()
                 for row in rows[80:]:
                     db.delete(row)
+                db.flush()
                 ex.enrollment = db.query(Enrollment).filter_by(exam_id=ex.id).count()
             labels.append(EdgeCaseLabel(id="EDGE-INVIGILATOR-DOUBLE", case_code="INVIGILATOR_DOUBLE_BOOKING",
                 entity_type="exam_pair", entity_id=f"{exams[2].id},{exams[3].id}",
