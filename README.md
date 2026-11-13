@@ -123,6 +123,8 @@ Frontend tests: `npm test`.
 - `docs/ALGORITHM.md` — hard constraints, strategies, reason codes and complexity.
 - `docs/AI_USAGE.md` — transparent AI tool and prompt record.
 - `docs/DEMO.md` — suggested five-minute challenge demonstration.
+- `docs/DEPLOYMENT.md` — Render backend setup, persistent SQLite storage, CORS and Lovable API configuration.
+- `render.yaml` — Render Blueprint for the FastAPI service and persistent disk.
 
 ## Quality gates
 
