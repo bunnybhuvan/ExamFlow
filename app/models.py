@@ -73,7 +73,7 @@ class UnassignedExam(Base):
 class ScheduleRun(Base):
     __tablename__ = "schedule_runs"
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     seed: Mapped[int] = mapped_column(Integer, nullable=False)
     scheduled: Mapped[int] = mapped_column(Integer, nullable=False)
     unassigned: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -83,7 +83,7 @@ class ScheduleRun(Base):
 class ScheduleEvent(Base):
     __tablename__ = "schedule_events"
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     actor: Mapped[str] = mapped_column(String(160), default="scheduler-engine", nullable=False)
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
