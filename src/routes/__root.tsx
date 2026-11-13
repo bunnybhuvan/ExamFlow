@@ -8,7 +8,7 @@ import {
   Scripts,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -20,6 +20,7 @@ import { DemoBanner } from "@/components/app/demo-banner";
 import { AppActionsProvider } from "@/components/app/app-actions";
 import { DataSourceProvider } from "@/lib/data-source-provider";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { api } from "@/lib/api";
 
 function NotFoundComponent() {
   return (
@@ -141,6 +142,123 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const [authState, setAuthState] = useState<"loading" | "disabled" | "login" | "authenticated">(
+    "loading",
+  );
+  const [authUser, setAuthUser] = useState<{
+    id: string;
+    email: string;
+    role: string;
+  } | null>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    api
+      .authConfig()
+      .then(async (config) => {
+        if (!active) return;
+        if (!config.enabled) {
+          setAuthState("disabled");
+          return;
+        }
+        try {
+          const user = await api.me();
+          if (active) {
+            setAuthUser(user);
+            setAuthState("authenticated");
+          }
+        } catch {
+          if (active) setAuthState("login");
+        }
+      })
+      .catch(() => {
+        if (active) setAuthState("login");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function submitLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmitting(true);
+    setAuthError("");
+    try {
+      const user = await api.login(email, password);
+      setAuthUser(user);
+      setAuthState("authenticated");
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Unable to sign in.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (authState === "loading") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
+        Loading ExamFlow…
+      </div>
+    );
+  }
+
+  if (authState === "login") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <form
+          onSubmit={submitLogin}
+          className="w-full max-w-md space-y-5 rounded-2xl border border-border bg-card p-8 shadow-xl"
+        >
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+              ExamFlow secure access
+            </p>
+            <h1 className="mt-2 text-3xl font-bold text-foreground">Sign in</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Use your university operations account.
+            </p>
+          </div>
+          <label className="block space-y-2 text-sm font-medium text-foreground">
+            Email
+            <input
+              required
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2"
+            />
+          </label>
+          <label className="block space-y-2 text-sm font-medium text-foreground">
+            Password
+            <input
+              required
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2"
+            />
+          </label>
+          {authError && (
+            <p role="alert" className="text-sm text-destructive">
+              {authError}
+            </p>
+          )}
+          <button
+            disabled={submitting}
+            className="w-full rounded-md bg-primary px-4 py-2.5 font-semibold text-primary-foreground disabled:opacity-50"
+          >
+            {submitting ? "Signing in…" : "Sign in securely"}
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -151,6 +269,25 @@ function RootComponent() {
               <div className="flex min-h-screen w-full">
                 <AppSidebar />
                 <SidebarInset className="min-w-0 bg-transparent">
+                  <div className="flex items-center justify-end gap-3 border-b border-border/60 px-4 py-2 text-xs text-muted-foreground">
+                    {authUser && (
+                      <span>
+                        {authUser.email} · {authUser.role}
+                      </span>
+                    )}
+                    {authState === "authenticated" && (
+                      <button
+                        onClick={() => {
+                          api.logout();
+                          setAuthUser(null);
+                          setAuthState("login");
+                        }}
+                        className="rounded-md border border-border px-3 py-1.5 font-medium text-foreground hover:bg-accent"
+                      >
+                        Sign out
+                      </button>
+                    )}
+                  </div>
                   <TopBar />
                   <DemoBanner />
                   <main className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-6 md:px-6 lg:px-8">
@@ -161,8 +298,8 @@ function RootComponent() {
             </SidebarProvider>
           </AppActionsProvider>
         </TooltipProvider>
+        <Toaster richColors position="bottom-right" />
       </DataSourceProvider>
-      <Toaster richColors position="bottom-right" />
     </QueryClientProvider>
   );
 }

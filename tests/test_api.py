@@ -214,3 +214,100 @@ def test_postgresql_connection_url_normalization():
     assert normalize_database_url(
         "sqlite:///./data/test.db"
     ) == "sqlite:///./data/test.db"
+
+
+
+def test_separate_room_accommodation_allocates_student_to_private_room(client):
+    generated = client.post("/api/v1/datasets/generate", json={
+        "seed": 20261113, "students": 80, "exams": 8, "rooms": 12,
+        "invigilators": 16, "include_edge_cases": False,
+    })
+    assert generated.status_code == 200, generated.text
+    db = TestingSession()
+    try:
+        student = db.get(__import__("app.models", fromlist=["Student"]).Student, "STU-000001")
+        assert student is not None
+        student.accommodations = ["separate_room"]
+        db.commit()
+    finally:
+        db.close()
+
+    result = client.post("/api/v1/schedules/generate", json={
+        "start_date": "2026-12-07", "end_date": "2027-01-01",
+        "daily_start": "09:00", "daily_end": "18:00",
+        "break_buffer_minutes": 15, "seed": 20261113, "strategy": "balanced",
+    })
+    assert result.status_code == 200, result.text
+    rows = client.get("/api/v1/schedules").json()
+    private_rows = [row for row in rows if "STU-000001" in row["student_ids"]]
+    assert private_rows
+    assert all(row["enrolled"] == 1 for row in private_rows)
+    for exam_id in {row["exam_id"] for row in private_rows}:
+        same_exam = [row for row in rows if row["exam_id"] == exam_id]
+        assert sum("STU-000001" in row["student_ids"] for row in same_exam) == 1
+    report = client.get("/api/v1/reports/validation").json()
+    assert report["failed"] == 0, report
+    assert any(check["name"] == "Separate-room accommodations isolated" and check["status"] == "pass"
+               for check in report["checks"])
+
+
+
+def test_auth_config_and_password_login(client, monkeypatch):
+    from app.models import User
+    from app.security import hash_password
+
+    monkeypatch.setenv("EXAMFLOW_AUTH_SECRET", "test-secret-" + "x" * 40)
+    db = TestingSession()
+    try:
+        db.add(User(id="USR-TEST-LOGIN", email="admin@example.test",
+            password_hash=hash_password("Strong-Test-Password-2026"),
+            role="admin", active=True))
+        db.commit()
+    finally:
+        db.close()
+
+    assert client.get("/api/v1/auth/config").json() == {"enabled": False}
+    response = client.post("/api/v1/auth/login", json={
+        "email": "ADMIN@example.test", "password": "Strong-Test-Password-2026"
+    })
+    assert response.status_code == 200, response.text
+    assert response.json()["user"]["role"] == "admin"
+    assert response.json()["token_type"] == "bearer"
+    invalid = client.post("/api/v1/auth/login", json={
+        "email": "admin@example.test", "password": "incorrect-password"
+    })
+    assert invalid.status_code == 401
+
+
+def test_role_based_access_control_enforces_read_only_viewers(client, monkeypatch):
+    from app.models import User
+    from app.security import hash_password
+    import app.security as security
+
+    monkeypatch.setenv("EXAMFLOW_AUTH_ENABLED", "true")
+    monkeypatch.setenv("EXAMFLOW_AUTH_SECRET", "unit-test-secret-" + "x" * 40)
+    monkeypatch.setattr(security, "SessionLocal", TestingSession)
+    db = TestingSession()
+    try:
+        db.add(User(id="USR-VIEWER", email="viewer@example.test",
+            password_hash=hash_password("Strong-Viewer-Password-2026"),
+            role="viewer", active=True))
+        db.commit()
+    finally:
+        db.close()
+
+    assert client.get("/api/v1/students").status_code == 401
+    login = client.post("/api/v1/auth/login", json={
+        "email": "viewer@example.test", "password": "Strong-Viewer-Password-2026"
+    })
+    assert login.status_code == 200, login.text
+    headers = {"Authorization": "Bearer " + login.json()["access_token"]}
+    assert client.get("/api/v1/students", headers=headers).status_code == 200
+    denied = client.post("/api/v1/datasets/generate", headers=headers, json={
+        "students": 1, "exams": 1, "rooms": 1, "invigilators": 1
+    })
+    assert denied.status_code == 403
+    assert client.post("/api/v1/auth/change-password", headers=headers, json={
+        "current_password": "Strong-Viewer-Password-2026",
+        "new_password": "Even-Stronger-Password-2026"
+    }).status_code == 200
