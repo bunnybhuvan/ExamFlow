@@ -220,15 +220,103 @@ def generate_schedule(db: Session, p):
     assigned, unassigned = [], []
     for ex in exams:
         eligible_students = enrollment_map.get(ex.id, [])
-        accommodation_tags = {str(tag).strip().lower().replace(" ", "_").replace("%", "")
+        exam_accommodation_tags = {str(tag).strip().lower().replace(" ", "_").replace("-", "_").replace("%", "")
             for tag in (ex.accommodations or [])}
+        accommodation_tags = set(exam_accommodation_tags)
         for sid in eligible_students:
             if sid in student_by_id:
                 accommodation_tags.update(str(tag).strip().lower().replace(" ", "_").replace("%", "")
                     for tag in (student_by_id[sid].accommodations or []))
-        if "separate_room" in accommodation_tags:
-            unassigned.append((ex,"UNSUPPORTED_ACCOMMODATION","Separate-room accommodation requires multi-room exam splitting, which this version does not support."))
-            ex.status="unassigned"; continue
+        separate_ids = [sid for sid in eligible_students if
+            "separate_room" in exam_accommodation_tags or
+            bool({str(tag).strip().lower().replace(" ", "_").replace("-", "_")
+                  for tag in (student_by_id[sid].accommodations or [])} & {"separate_room", "individual_room"})]
+        if separate_ids:
+            regular_ids = [sid for sid in eligible_students if sid not in set(separate_ids)]
+            duration = math.ceil(ex.duration_minutes * 1.25) if accommodation_tags & {"extra_time_25", "extra_time", "25_extra_time"} else ex.duration_minutes
+            equipment = set(ex.required_equipment or [])
+            if "screen_reader" in accommodation_tags:
+                equipment.add("Computers")
+            exam_slots = [slot for slot in slots if ex.window_start <= slot.date() <= ex.window_end]
+            exam_slots.sort(key=lambda slot: (day_load.get(slot.date().isoformat(), 0), slot))
+            selected_plan = None
+            for start_dt in exam_slots:
+                end_dt = start_dt + timedelta(minutes=duration)
+                if end_dt.time() > day_end:
+                    continue
+                day_key = start_dt.date().isoformat()
+                if any(any(_overlap(start_dt,end_dt,x,y,p.break_buffer_minutes) for x,y in student_assignments.get(sid,[])) for sid in eligible_students):
+                    continue
+                free_rooms = [room for room in sorted(rooms,key=lambda room:(room.capacity,room.id))
+                    if equipment.issubset(set(room.equipment or []))
+                    and not any(cl.get("start","") <= day_key <= cl.get("end","") for cl in (room.closures or []))
+                    and not any(_overlap(start_dt,end_dt,x,y) for x,y in room_assignments.get(room.id,[]))]
+                groups = []
+                used_rooms = set()
+                valid = True
+                for sid in sorted(separate_ids):
+                    tags = exam_accommodation_tags | {str(tag).strip().lower().replace(" ", "_").replace("-", "_") for tag in (student_by_id[sid].accommodations or [])}
+                    accessible = bool(tags & {"accessible_seating","wheelchair","accessible"})
+                    choices = [room for room in free_rooms if room.id not in used_rooms and (not accessible or room.accessible)]
+                    if not choices:
+                        valid = False
+                        break
+                    room = choices[0]
+                    groups.append((room,[sid]))
+                    used_rooms.add(room.id)
+                if valid and regular_ids:
+                    accessible = bool(exam_accommodation_tags & {"accessible_seating","wheelchair","accessible"}) or any(
+                        {str(tag).strip().lower().replace(" ", "_").replace("-", "_") for tag in (student_by_id[sid].accommodations or [])}
+                        & {"accessible_seating","wheelchair","accessible"} for sid in regular_ids)
+                    choices = [room for room in free_rooms if room.id not in used_rooms
+                        and room.capacity >= len(regular_ids) and (not accessible or room.accessible)]
+                    if choices:
+                        groups.append((choices[0],regular_ids))
+                        used_rooms.add(choices[0].id)
+                    else:
+                        valid = False
+                if not valid or not groups:
+                    continue
+                used_staff = set()
+                staffed = []
+                for room, cohort in groups:
+                    needed = 2 if len(cohort) >= 150 else 1
+                    staff = [person for person in invigilators if person.id not in used_staff
+                        and day_key in (person.available_days or [])
+                        and person.assigned_duties < person.max_duties
+                        and not any(_overlap(start_dt,end_dt,x,y) for x,y in inv_assignments.get(person.id,[]))]
+                    staff.sort(key=lambda person:(person.assigned_duties,person.id))
+                    if len(staff) < needed:
+                        valid = False
+                        break
+                    selected_staff = staff[:needed]
+                    used_staff.update(person.id for person in selected_staff)
+                    staffed.append((room,cohort,selected_staff))
+                if valid:
+                    selected_plan = (start_dt,end_dt,staffed)
+                    break
+            if not selected_plan:
+                unassigned.append((ex,"ACCOMMODATION_CONFLICT",
+                    "Separate-room accommodation could not be satisfied with the available dedicated rooms, accessible facilities and invigilators."))
+                ex.status="unassigned"
+                continue
+            start_dt,end_dt,staffed = selected_plan
+            for room,cohort,staff in staffed:
+                db.add(Assignment(id=f"ASN-{ex.id}-{room.id}",exam_id=ex.id,room_id=room.id,
+                    student_ids=cohort,invigilator_ids=[person.id for person in staff],
+                    start=start_dt,end=end_dt,status="confirmed"))
+                room_assignments.setdefault(room.id,[]).append((start_dt,end_dt))
+                for sid in cohort:
+                    student_assignments.setdefault(sid,[]).append((start_dt,end_dt))
+                    student_day_load[(sid,start_dt.date().isoformat())]=student_day_load.get((sid,start_dt.date().isoformat()),0)+1
+                for person in staff:
+                    inv_assignments.setdefault(person.id,[]).append((start_dt,end_dt))
+                    person.assigned_duties += 1
+            day_key=start_dt.date().isoformat()
+            day_load[day_key]=day_load.get(day_key,0)+1
+            ex.status="scheduled"
+            assigned.append(ex)
+            continue
         needs_access = bool(accommodation_tags & {"accessible_seating","wheelchair","accessible"})
         needs_extra_time = bool(accommodation_tags & {"extra_time_25","extra_time","25_extra_time"})
         needs_screen_reader = "screen_reader" in accommodation_tags
@@ -303,7 +391,8 @@ def generate_schedule(db: Session, p):
         room,start_dt,end_dt,selected=placed
         assignment_id=f"ASN-{ex.id}-{room.id}"
         assignment=Assignment(id=assignment_id,exam_id=ex.id,room_id=room.id,
-            invigilator_ids=[v.id for v in selected],start=start_dt,end=end_dt,status="confirmed")
+            student_ids=eligible_students,invigilator_ids=[v.id for v in selected],
+            start=start_dt,end=end_dt,status="confirmed")
         db.add(assignment); assigned.append(assignment)
         room_assignments.setdefault(room.id,[]).append((start_dt,end_dt))
         day_key=start_dt.date().isoformat()
@@ -341,7 +430,8 @@ def assignment_rows(db: Session):
         e=exams[a.exam_id]; r=rooms[a.room_id]
         out.append({"id":a.id,"exam_id":e.id,"course_code":e.course_code,"course_name":e.course_name,
             "room_id":r.id,"room_name":r.name,"invigilator_ids":a.invigilator_ids,
-            "start":a.start.isoformat(),"end":a.end.isoformat(),"enrolled":e.enrollment,"capacity":r.capacity,"status":a.status})
+            "student_ids":a.student_ids or [],"start":a.start.isoformat(),"end":a.end.isoformat(),
+            "enrolled":len(a.student_ids or []) or e.enrollment,"capacity":r.capacity,"status":a.status})
     return out
 
 def unassigned_rows(db: Session):
@@ -353,13 +443,17 @@ def metrics_report(db: Session):
     exams=db.query(Exam).all(); assignments=assignment_rows(db); unassigned=unassigned_rows(db)
     rooms=db.query(Room).all(); invs=db.query(Invigilator).all()
     coverage={}
+    seen_exam_days=set()
     for a in assignments:
-        day=a["start"][:10]; coverage.setdefault(day,{"date":day,"scheduled":0,"unassigned":0}); coverage[day]["scheduled"]+=1
+        day=a["start"][:10]
+        if (a["exam_id"],day) not in seen_exam_days:
+            coverage.setdefault(day,{"date":day,"scheduled":0,"unassigned":0}); coverage[day]["scheduled"]+=1
+            seen_exam_days.add((a["exam_id"],day))
     for u in unassigned:
         e=next((x for x in exams if x.id==u["exam_id"]),None)
         if e:
             day=e.window_start.isoformat(); coverage.setdefault(day,{"date":day,"scheduled":0,"unassigned":0}); coverage[day]["unassigned"]+=1
-    return {"total_exams":len(exams),"scheduled":len(assignments),"unassigned":len(unassigned),
+    return {"total_exams":len(exams),"scheduled":len({row["exam_id"] for row in assignments}),"unassigned":len(unassigned),
         "conflicts":0,"room_utilization":sum(r.utilization for r in rooms)/max(1,len(rooms)),
         "coverage_by_day":sorted(coverage.values(),key=lambda x:x["date"]),
         "room_usage":[{"room":r.name,"utilization":r.utilization} for r in rooms],
@@ -377,13 +471,20 @@ def validation_report(db: Session):
         checks.append({"id":name.lower().replace(" ","-"),"name":name,"category":category,
             "status":"fail" if violations else "pass","violations":violations,"severity":severity,
             "description":description,"details":details or []})
-    cap=[]; closed=[]; equip=[]; room_conf=[]; student_conf=[]; inv_conf=[]; accom=[]; inv_avail=[]
+    cap=[]; closed=[]; equip=[]; room_conf=[]; student_conf=[]; inv_conf=[]; accom=[]; inv_avail=[]; allocation=[]; separate_room=[]
+    assigned_by_exam={}
     for a in assignments:
         e=exams[a["exam_id"]]; r=rooms[a["room_id"]]
         start=datetime.fromisoformat(a["start"]); end=datetime.fromisoformat(a["end"]); day=start.date().isoformat()
-        if r.capacity<e.enrollment: cap.append({"entity_type":"exam","entity_id":e.id,"message":"Room capacity is below exam enrollment."})
-        enrolled_accommodations = {str(tag).strip().lower().replace(" ", "_").replace("%", "")
-            for sid in enrol.get(e.id,set()) if sid in students for tag in (students[sid].accommodations or [])}
+        allocated_ids = set(a.get("student_ids") or enrol.get(e.id,set()))
+        if len(allocated_ids)>r.capacity: cap.append({"entity_type":"exam","entity_id":e.id,"message":"Assigned room capacity is below its allocated student count."})
+        assigned_by_exam.setdefault(e.id,[]).extend(sorted(allocated_ids))
+        exam_tags = {str(tag).strip().lower().replace(" ", "_").replace("-", "_") for tag in (e.accommodations or [])}
+        separate_required = bool(exam_tags & {"separate_room", "individual_room"}) or any(bool({"separate_room", "individual_room"} & {str(tag).strip().lower().replace(" ", "_").replace("-", "_") for tag in (students[sid].accommodations or [])}) for sid in allocated_ids if sid in students)
+        if separate_required and len(allocated_ids) != 1:
+            separate_room.append({"entity_type":"exam","entity_id":e.id,"message":"A student requiring a separate room shares a room with another student."})
+        enrolled_accommodations = {str(tag).strip().lower().replace(" ", "_").replace("-", "_").replace("%", "")
+            for sid in allocated_ids if sid in students for tag in (students[sid].accommodations or [])}
         enrolled_accommodations.update(str(tag).strip().lower().replace(" ", "_").replace("%", "") for tag in (e.accommodations or []))
         if not r.accessible and enrolled_accommodations & {"accessible_seating","wheelchair","accessible"}:
             accom.append({"entity_type":"exam","entity_id":e.id,"message":"An enrolled student requires accessible seating but the assigned room is not accessible."})
@@ -391,7 +492,7 @@ def validation_report(db: Session):
             accom.append({"entity_type":"exam","entity_id":e.id,"message":"An enrolled student requires screen-reader support but the assigned room lacks computer equipment."})
         if any(c.get("start","")<=day<=c.get("end","") for c in (r.closures or [])): closed.append({"entity_type":"room","entity_id":r.id,"message":"Assignment occurs during a room closure."})
         if not set(e.required_equipment or []).issubset(set(r.equipment or [])): equip.append({"entity_type":"exam","entity_id":e.id,"message":"Required equipment is missing."})
-        for sid in enrol.get(e.id,set()):
+        for sid in allocated_ids:
             for prev in student_schedule.get(sid,[]):
                 if _overlap(start,end,prev[0],prev[1]): student_conf.append({"entity_type":"student","entity_id":sid,"message":"Student has overlapping exams."})
             student_schedule.setdefault(sid,[]).append((start,end))
@@ -404,6 +505,14 @@ def validation_report(db: Session):
             for prev in inv_schedule.get(vid,[]):
                 if _overlap(start,end,prev[0],prev[1]): inv_conf.append({"entity_type":"invigilator","entity_id":vid,"message":"Invigilator is double-booked."})
             inv_schedule.setdefault(vid,[]).append((start,end))
+    for exam_id, expected_students in enrol.items():
+        if exam_id not in assigned_by_exam:
+            continue
+        actual = assigned_by_exam.get(exam_id, [])
+        if sorted(actual) != sorted(expected_students):
+            allocation.append({"entity_type":"exam","entity_id":exam_id,"message":f"Expected {len(expected_students)} allocated student places; found {len(actual)}."})
+    add("Every enrolled student allocated once","hard",len(allocation),"Every enrolled student must be allocated to exactly one room for the exam.","critical",allocation)
+    add("Separate-room accommodations isolated","hard",len(separate_room),"Students requiring a separate room must be the only student in that room.","critical",separate_room)
     add("Room capacity respected","hard",len(cap),"Every assigned room must seat all enrolled students.","critical",cap)
     add("No room double booking","hard",len(room_conf),"A room cannot host overlapping exams.","critical",room_conf)
     add("No student exam overlap","hard",len(student_conf),"A student cannot be assigned to overlapping exams.","critical",student_conf)
