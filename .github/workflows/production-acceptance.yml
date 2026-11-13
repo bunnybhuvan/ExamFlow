@@ -13,82 +13,51 @@ permissions:
 jobs:
   production-acceptance:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
-      - name: Execute the real scheduler and verify production workflows
+      - name: Verify production health, authentication gate and CORS
         env:
           API_BASE_URL: https://examflow-api-f24k.onrender.com/api/v1
           FRONTEND_ORIGIN: https://examflow-theta.vercel.app
         run: |
           python - <<'PY'
-          import json, os, urllib.request
+          import json, os, urllib.error, urllib.request
 
           base = os.environ["API_BASE_URL"]
           origin = os.environ["FRONTEND_ORIGIN"]
 
-          def request(path, method="GET", payload=None, headers=None):
-              data = json.dumps(payload).encode() if payload is not None else None
-              req = urllib.request.Request(
-                  base + path, data=data, method=method,
-                  headers={"Accept": "application/json", **({"Content-Type": "application/json"} if data else {}), **(headers or {})}
-              )
-              with urllib.request.urlopen(req, timeout=180) as response:
-                  return response.status, response.headers, response.read()
+          def get(path):
+              request = urllib.request.Request(base + path, headers={"Accept": "application/json"})
+              with urllib.request.urlopen(request, timeout=60) as response:
+                  return response.status, json.loads(response.read())
 
-          status, _, raw = request("/health/database")
-          health = json.loads(raw)
-          assert status == 200 and health.get("status") == "connected", health
-          assert health.get("database") == "postgresql", health
-          print("PASS: hosted PostgreSQL connection")
+          status, health = get("/health")
+          assert status == 200, health
+          print("PASS: public API health")
 
-          for path, expected in [("/students", 120), ("/exams", 12), ("/rooms", 8), ("/invigilators", 12)]:
-              status, _, raw = request(path)
-              records = json.loads(raw)
-              assert status == 200 and len(records) == expected, (path, status, len(records))
-              print(f"PASS: {path} returned {len(records)} records")
+          status, database = get("/health/database")
+          assert status == 200 and database.get("status") == "connected", database
+          assert database.get("database") == "postgresql", database
+          print("PASS: hosted PostgreSQL")
 
-          payload = {
-              "start_date": "2026-12-07",
-              "end_date": "2026-12-18",
-              "daily_start": "09:00",
-              "daily_end": "18:00",
-              "break_buffer_minutes": 30,
-              "seed": 20261113,
-              "strategy": "balanced"
-          }
-          status, _, raw = request("/schedules/generate", "POST", payload)
-          generated = json.loads(raw)
-          assert status == 200, generated
-          assert generated["scheduled"] + generated["unassigned"] == 12, generated
-          print("PASS: real scheduler executed", json.dumps(generated))
+          status, auth = get("/auth/config")
+          assert status == 200 and auth.get("enabled") is True, auth
+          print("PASS: production authentication is enabled")
 
-          for path in ["/schedules", "/schedules/unassigned", "/audit"]:
-              status, _, raw = request(path)
-              data = json.loads(raw)
-              assert status == 200 and isinstance(data, list), (path, status)
-              print(f"PASS: {path} returned {len(data)} records")
+          request = urllib.request.Request(base + "/students", headers={"Accept": "application/json"})
+          try:
+              urllib.request.urlopen(request, timeout=30)
+              raise AssertionError("Protected student data endpoint unexpectedly allowed anonymous access")
+          except urllib.error.HTTPError as error:
+              assert error.code == 401, (error.code, error.read().decode())
+          print("PASS: anonymous access to protected data is rejected")
 
-          status, _, raw = request("/reports/validation")
-          validation = json.loads(raw)
-          assert status == 200 and validation["failed"] == 0, validation
-          print("PASS: validation report", json.dumps({"passed": validation["passed"], "failed": validation["failed"]}))
-
-          status, _, raw = request("/reports/metrics")
-          metrics = json.loads(raw)
-          assert status == 200 and metrics["total_exams"] == 12 and metrics["scheduled"] == generated["scheduled"], metrics
-          print("PASS: dashboard metrics", json.dumps(metrics))
-
-          for fmt in ["csv", "json", "sql"]:
-              status, headers, raw = request(f"/exports/{fmt}")
-              assert status == 200 and len(raw) > 20, (fmt, status, len(raw))
-              print(f"PASS: {fmt.upper()} export ({len(raw)} bytes; {headers.get('Content-Type')})")
-
-          req = urllib.request.Request(
+          request = urllib.request.Request(
               base + "/health",
               method="OPTIONS",
               headers={"Origin": origin, "Access-Control-Request-Method": "GET"}
           )
-          with urllib.request.urlopen(req, timeout=30) as response:
+          with urllib.request.urlopen(request, timeout=30) as response:
               allowed = response.headers.get("Access-Control-Allow-Origin")
               assert response.status == 200 and allowed == origin, (response.status, allowed)
           print("PASS: production frontend CORS origin")
