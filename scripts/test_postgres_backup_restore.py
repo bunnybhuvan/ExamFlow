@@ -1,5 +1,10 @@
 """PostgreSQL SQL-export restore integration test used by CI's disposable database."""
 import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import psycopg
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
