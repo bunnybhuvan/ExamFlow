@@ -15,7 +15,8 @@ RESTORE_SCHEMA = "examflow_backup_restore"
 
 
 def scoped_url(schema: str) -> str:
-    return URL + f"?options=-csearch_path%3D{schema}"
+    sqlalchemy_url = URL.replace("postgresql://", "postgresql+psycopg://", 1)
+    return sqlalchemy_url + f"?options=-csearch_path%3D{schema}"
 
 
 def main():
