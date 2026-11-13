@@ -5,7 +5,8 @@ from datetime import timezone
 from fastapi import FastAPI, Depends, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, select, JSON
+from sqlalchemy.schema import CreateTable, CreateIndex
 from .database import Base, engine, get_db
 from . import models
 from .schemas import DatasetRequest, ScheduleRequest, ExamInput
@@ -151,25 +152,68 @@ def exports(file_format: str, db: Session=Depends(get_db)):
             headers={"Content-Disposition":'attachment; filename="examflow-schedule.json"'})
     if file_format=="sql":
         bind = db.get_bind()
-        if bind.dialect.name != "sqlite":
-            raise HTTPException(
-                status_code=501,
-                detail="SQL dump export is currently supported for SQLite databases only.",
-            )
-        raw_connection = bind.raw_connection()
-        try:
-            # SQLite's dump emits schema and data in table-name order. Disable FK
-            # enforcement for the import transaction, then restore it at the end.
-            sqlite_connection = raw_connection.driver_connection
-            dump = "\n".join(sqlite_connection.iterdump())
-            sql_script = (
-                "-- ExamFlow database export; generated from the active database.\n"
-                "PRAGMA foreign_keys=OFF;\n"
-                + dump
-                + "\nPRAGMA foreign_keys=ON;\n"
-            )
-        finally:
-            raw_connection.close()
+        if bind.dialect.name == "sqlite":
+            raw_connection = bind.raw_connection()
+            try:
+                sqlite_connection = raw_connection.driver_connection
+                dump = "\n".join(sqlite_connection.iterdump())
+                sql_script = (
+                    "-- ExamFlow database export; generated from the active SQLite database.\n"
+                    "PRAGMA foreign_keys=OFF;\n"
+                    + dump
+                    + "\nPRAGMA foreign_keys=ON;\n"
+                )
+            finally:
+                raw_connection.close()
+        elif bind.dialect.name == "postgresql":
+            # Produce a portable, provider-independent PostgreSQL SQL script.
+            # SQLAlchemy supplies dialect-correct DDL and identifier quoting.
+            dialect = bind.dialect
+            quote = dialect.identifier_preparer.quote
+            statements = [
+                "-- ExamFlow PostgreSQL database export.\n",
+                "BEGIN;\n",
+            ]
+
+            def sql_value(value, column):
+                if value is None:
+                    return "NULL"
+                if isinstance(column.type, JSON):
+                    rendered = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+                elif isinstance(value, bool):
+                    return "TRUE" if value else "FALSE"
+                elif isinstance(value, (int, float)):
+                    return str(value)
+                elif isinstance(value, datetime):
+                    rendered = value.isoformat(sep=" ")
+                elif hasattr(value, "isoformat"):
+                    rendered = value.isoformat()
+                else:
+                    rendered = str(value)
+                return "'" + rendered.replace("'", "''") + "'"
+
+            tables = list(Base.metadata.sorted_tables)
+            for table in tables:
+                statements.append(str(CreateTable(table).compile(dialect=dialect)) + ";\n")
+            for table in tables:
+                result = db.execute(select(table))
+                column_names = [column.name for column in table.columns]
+                columns_sql = ", ".join(quote(name) for name in column_names)
+                table_sql = quote(table.name)
+                for row in result.mappings():
+                    values_sql = ", ".join(
+                        sql_value(row[name], table.columns[name]) for name in column_names
+                    )
+                    statements.append(
+                        f"INSERT INTO {table_sql} ({columns_sql}) VALUES ({values_sql});\n"
+                    )
+            for table in tables:
+                for index in table.indexes:
+                    statements.append(str(CreateIndex(index).compile(dialect=dialect)) + ";\n")
+            statements.append("COMMIT;\n")
+            sql_script = "".join(statements)
+        else:
+            raise HTTPException(status_code=501, detail="SQL export is not supported for this database dialect.")
         return Response(
             content=sql_script,
             media_type="application/sql",
