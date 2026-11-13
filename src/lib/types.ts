@@ -63,6 +63,7 @@ export interface ScheduleAssignment {
   room_id: string;
   room_name: string;
   invigilator_ids: string[];
+  student_ids?: string[];
   start: string; // ISO datetime
   end: string;
   enrolled: number;
