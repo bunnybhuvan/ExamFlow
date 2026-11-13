@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 import pytest
 from app.database import Base, get_db
-from app.main import app
+from app.main import app, configured_cors_origins
 
 engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
 TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
@@ -27,6 +27,21 @@ def client():
 def test_health_and_database(client):
     assert client.get("/api/v1/health").json()["status"] == "ok"
     assert client.get("/api/v1/health/database").json()["status"] == "connected"
+
+def test_database_health_reports_the_active_engine(client):
+    response = client.get("/api/v1/health/database")
+    assert response.json()["database"] == "sqlite"
+
+
+def test_cors_origins_are_configurable(monkeypatch):
+    monkeypatch.setenv(
+        "EXAMFLOW_CORS_ORIGINS",
+        "https://examflow.example, https://preview.example/",
+    )
+    assert configured_cors_origins() == [
+        "https://examflow.example",
+        "https://preview.example",
+    ]
 
 def test_dataset_and_schedule_round_trip(client):
     generated=client.post("/api/v1/datasets/generate",json={
