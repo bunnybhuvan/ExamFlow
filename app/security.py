@@ -91,7 +91,7 @@ async def auth_middleware(request: Request, call_next):
         user = db.get(models.User, claims.get("sub"))
         if not user or not user.active or user.role != claims.get("role"):
             return JSONResponse({"detail": "Account is inactive or access has changed."}, status_code=401)
-        if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.url.path != "/api/v1/auth/change-password":
             if user.role not in {"admin", "scheduler"}:
                 return JSONResponse({"detail": "Your role cannot modify scheduling data."}, status_code=403)
             if request.url.path.startswith("/api/v1/auth/users") and user.role != "admin":
