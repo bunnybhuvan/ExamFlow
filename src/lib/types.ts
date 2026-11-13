@@ -169,4 +169,4 @@ export interface Conflict {
   remediation: string;
 }
 
-export type ExportFormat = "csv" | "json";
+export type ExportFormat = "csv" | "json" | "sql";
