@@ -45,6 +45,32 @@ def test_dataset_and_schedule_round_trip(client):
     assert len(client.get("/api/v1/schedules").json()) == body["scheduled"]
     assert len(client.get("/api/v1/schedules/unassigned").json()) == body["unassigned"]
 
+def test_faculty_scale_dataset_and_schedule_smoke(client):
+    generated=client.post("/api/v1/datasets/generate",json={
+        "seed":20261111,"students":5000,"exams":300,"rooms":100,"invigilators":200,
+        "include_edge_cases":False
+    })
+    assert generated.status_code == 200, generated.text
+    assert generated.json()["students"] == 5000
+    assert generated.json()["exams"] == 300
+    assert generated.json()["rooms"] == 100
+    assert generated.json()["invigilators"] == 200
+    assert len(client.get("/api/v1/students").json()) == 5000
+    assert len(client.get("/api/v1/exams").json()) == 300
+    assert len(client.get("/api/v1/rooms").json()) == 100
+    assert len(client.get("/api/v1/invigilators").json()) == 200
+
+    result=client.post("/api/v1/schedules/generate",json={
+        "start_date":"2026-12-07","end_date":"2027-01-01","daily_start":"09:00",
+        "daily_end":"18:00","break_buffer_minutes":15,"seed":20261111,"strategy":"balanced"
+    })
+    assert result.status_code == 200, result.text
+    body=result.json()
+    assert body["scheduled"] + body["unassigned"] == 300
+    validation=client.get("/api/v1/reports/validation").json()
+    assert validation["failed"] == 0
+    assert all(check["violations"] == 0 for check in validation["checks"])
+
 def test_invalid_schedule_window_is_rejected(client):
     response=client.post("/api/v1/schedules/generate",json={
         "start_date":"2026-12-20","end_date":"2026-12-01","daily_start":"09:00","daily_end":"18:00"
