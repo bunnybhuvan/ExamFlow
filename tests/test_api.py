@@ -421,3 +421,69 @@ def test_normalized_domain_entities_are_generated_with_valid_relationships(clien
         assert db.query(Student).count() == 120
     finally:
         db.close()
+
+
+
+def test_dataset_bundle_contains_normalized_tables_manifest_and_ground_truth(client):
+    import io, json, zipfile
+    generated = client.post("/api/v1/datasets/generate", json={
+        "seed": 20261022, "students": 120, "exams": 12, "rooms": 10,
+        "invigilators": 12, "include_edge_cases": True,
+    })
+    assert generated.status_code == 200, generated.text
+    response = client.get("/api/v1/exports/bundle")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/zip")
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        names = set(archive.namelist())
+        assert "manifest.json" in names and "README.txt" in names
+        for table in ("courses", "exam_courses", "exam_requirements", "room_capacities",
+                      "availabilities", "accommodations", "edge_case_labels"):
+            assert f"data/{table}.csv" in names
+            assert f"data/{table}.json" in names
+        manifest = json.loads(archive.read("manifest.json"))
+        assert manifest["tables"]["students"]["rows"] == 120
+        assert manifest["tables"]["edge_case_labels"]["rows"] >= 5
+        assert manifest["ground_truth_separation"].startswith("edge_case_labels")
+
+
+def test_reproducibility_report_has_stable_hashes_for_generated_domain_tables(client):
+    payload = {"seed": 20261022, "students": 120, "exams": 12, "rooms": 10,
+               "invigilators": 12, "include_edge_cases": True}
+    assert client.post("/api/v1/datasets/generate", json=payload).status_code == 200
+    first = client.get("/api/v1/exports/reproducibility").json()
+    assert client.post("/api/v1/datasets/generate", json=payload).status_code == 200
+    second = client.get("/api/v1/exports/reproducibility").json()
+    assert first == second
+    assert first["tables"]["students"]["rows"] == 120
+    assert first["tables"]["exam_courses"]["rows"] == 12
+    assert all(len(item["sha256"]) == 64 for item in first["tables"].values())
+
+
+def test_normalized_availability_and_effective_capacity_drive_schedule(client):
+    from app.models import Availability, RoomCapacity
+    generated = client.post("/api/v1/datasets/generate", json={
+        "seed": 20261022, "students": 80, "exams": 4, "rooms": 4,
+        "invigilators": 4, "include_edge_cases": False,
+    })
+    assert generated.status_code == 200, generated.text
+    db = TestingSession()
+    try:
+        # Close every normalized availability row for the first invigilator.
+        person = db.query(Availability).first().invigilator_id
+        for row in db.query(Availability).filter_by(invigilator_id=person).all():
+            row.is_available = False
+        # Make all room capacity records too small for the largest exam.
+        for row in db.query(RoomCapacity).all():
+            row.capacity = 1
+        db.commit()
+    finally:
+        db.close()
+    result = client.post("/api/v1/schedules/generate", json={
+        "start_date": "2026-12-07", "end_date": "2027-01-01",
+        "daily_start": "09:00", "daily_end": "18:00",
+        "break_buffer_minutes": 15, "seed": 20261022, "strategy": "balanced",
+    })
+    assert result.status_code == 200, result.text
+    validation = client.get("/api/v1/reports/validation").json()
+    assert validation["failed"] == 0
