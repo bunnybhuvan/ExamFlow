@@ -5,16 +5,21 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
 ROOT = Path(__file__).resolve().parent.parent
-_raw_database_url = os.getenv("DATABASE_URL", "").strip()
 
-# Render and several hosted PostgreSQL providers still expose the legacy
-# postgres:// scheme. SQLAlchemy's psycopg 3 dialect uses postgresql+psycopg.
-if _raw_database_url.startswith("postgres://"):
-    DATABASE_URL = "postgresql+psycopg://" + _raw_database_url[len("postgres://"):]
-elif _raw_database_url.startswith("postgresql://"):
-    DATABASE_URL = "postgresql+psycopg://" + _raw_database_url[len("postgresql://"):]
-elif _raw_database_url:
-    DATABASE_URL = _raw_database_url
+
+def normalize_database_url(url: str) -> str:
+    """Normalize hosted PostgreSQL URLs for SQLAlchemy's psycopg 3 dialect."""
+    value = url.strip()
+    if value.startswith("postgres://"):
+        return "postgresql+psycopg://" + value[len("postgres://"):]
+    if value.startswith("postgresql://"):
+        return "postgresql+psycopg://" + value[len("postgresql://"):]
+    return value
+
+
+_raw_database_url = os.getenv("DATABASE_URL", "").strip()
+if _raw_database_url:
+    DATABASE_URL = normalize_database_url(_raw_database_url)
 else:
     DB_PATH = Path(os.getenv("EXAMFLOW_DB_PATH", ROOT / "data" / "examflow.db"))
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
