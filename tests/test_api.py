@@ -440,11 +440,15 @@ def test_dataset_bundle_contains_normalized_tables_manifest_and_ground_truth(cli
     with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
         names = set(archive.namelist())
         assert "manifest.json" in names and "README.txt" in names
+        assert "database/examflow-database.sql" in names
+        assert "CREATE TABLE students" in archive.read("database/examflow-database.sql").decode("utf-8")
         for table in ("courses", "exam_courses", "exam_requirements", "room_capacities",
                       "availabilities", "accommodations", "edge_case_labels"):
             assert f"data/{table}.csv" in names
             assert f"data/{table}.json" in names
         manifest = json.loads(archive.read("manifest.json"))
+        assert manifest["seed"] == 20261022
+        assert manifest["generator_command"]["payload"]["students"] == 120
         assert manifest["tables"]["students"]["rows"] == 120
         assert manifest["tables"]["edge_case_labels"]["rows"] >= 5
         assert manifest["ground_truth_separation"].startswith("edge_case_labels")
