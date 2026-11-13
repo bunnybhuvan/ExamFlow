@@ -149,6 +149,32 @@ def exports(file_format: str, db: Session=Depends(get_db)):
             "assignments":assignment_rows(db),"unassigned":unassigned_rows(db),"validation":validation_report(db)}
         return Response(content=json.dumps(data,default=str,indent=2),media_type="application/json",
             headers={"Content-Disposition":'attachment; filename="examflow-schedule.json"'})
+    if file_format=="sql":
+        bind = db.get_bind()
+        if bind.dialect.name != "sqlite":
+            raise HTTPException(
+                status_code=501,
+                detail="SQL dump export is currently supported for SQLite databases only.",
+            )
+        raw_connection = bind.raw_connection()
+        try:
+            # SQLite's dump emits schema and data in table-name order. Disable FK
+            # enforcement for the import transaction, then restore it at the end.
+            sqlite_connection = raw_connection.driver_connection
+            dump = "\n".join(sqlite_connection.iterdump())
+            sql_script = (
+                "-- ExamFlow database export; generated from the active database.\n"
+                "PRAGMA foreign_keys=OFF;\n"
+                + dump
+                + "\nPRAGMA foreign_keys=ON;\n"
+            )
+        finally:
+            raw_connection.close()
+        return Response(
+            content=sql_script,
+            media_type="application/sql",
+            headers={"Content-Disposition": 'attachment; filename="examflow-database.sql"'},
+        )
     if file_format=="csv":
         output=io.StringIO()
         writer=csv.DictWriter(output,fieldnames=["assignment_id","exam_id","course_code","course_name","room_id","room_name","invigilator_ids","start","end","enrolled","capacity","status"])
@@ -157,7 +183,7 @@ def exports(file_format: str, db: Session=Depends(get_db)):
             writer.writerow({"assignment_id":row["id"],**{k:row[k] for k in writer.fieldnames if k!="assignment_id" and k in row},"invigilator_ids":";".join(row["invigilator_ids"])})
         return Response(content=output.getvalue(),media_type="text/csv",
             headers={"Content-Disposition":'attachment; filename="examflow-schedule.csv"'})
-    raise HTTPException(404,detail="Export format must be csv or json.")
+    raise HTTPException(404,detail="Export format must be csv, json or sql.")
 
 @app.get("/api/v1/edge-cases")
 def edge_cases_list(db: Session=Depends(get_db)):

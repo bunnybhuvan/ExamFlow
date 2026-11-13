@@ -2,6 +2,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+import sqlite3
+from app.models import EdgeCaseLabel
 import pytest
 from app.database import Base, get_db
 from app.main import app, configured_cors_origins
@@ -122,3 +124,80 @@ def test_labelled_edge_cases_are_separate_and_never_break_hard_constraints(clien
     validation=client.get("/api/v1/reports/validation").json()
     assert validation["failed"] == 0
     assert all(check["violations"] == 0 for check in validation["checks"])
+
+
+
+def _generate_small_schedule(client, include_edge_cases=False):
+    generated = client.post("/api/v1/datasets/generate", json={
+        "seed": 20261113, "students": 180, "exams": 16, "rooms": 12,
+        "invigilators": 16, "include_edge_cases": include_edge_cases,
+    })
+    assert generated.status_code == 200, generated.text
+    schedule = client.post("/api/v1/schedules/generate", json={
+        "start_date": "2026-12-07", "end_date": "2026-12-18",
+        "daily_start": "09:00", "daily_end": "18:00",
+        "break_buffer_minutes": 15, "seed": 20261113, "strategy": "balanced",
+    })
+    assert schedule.status_code == 200, schedule.text
+    return {
+        "students": client.get("/api/v1/students").json(),
+        "exams": client.get("/api/v1/exams").json(),
+        "rooms": client.get("/api/v1/rooms").json(),
+        "invigilators": client.get("/api/v1/invigilators").json(),
+        "assignments": client.get("/api/v1/schedules").json(),
+        "unassigned": client.get("/api/v1/schedules/unassigned").json(),
+    }
+
+
+def test_fixed_seed_reproduces_dataset_and_schedule(client):
+    first = _generate_small_schedule(client)
+    second = _generate_small_schedule(client)
+    assert first == second
+
+
+def test_evaluation_labels_do_not_change_scheduler_output(client):
+    baseline = _generate_small_schedule(client)
+    db = TestingSession()
+    try:
+        db.add(EdgeCaseLabel(
+            id="EVAL-ONLY-001", case_code="SYNTHETIC_EVALUATION_LABEL",
+            entity_type="exam", entity_id="EXAM-2026-000001",
+            expected_detection="Must remain evaluation-only.",
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    rerun = client.post("/api/v1/schedules/generate", json={
+        "start_date": "2026-12-07", "end_date": "2026-12-18",
+        "daily_start": "09:00", "daily_end": "18:00",
+        "break_buffer_minutes": 15, "seed": 20261113, "strategy": "balanced",
+    })
+    assert rerun.status_code == 200, rerun.text
+    assert client.get("/api/v1/schedules").json() == baseline["assignments"]
+    assert client.get("/api/v1/schedules/unassigned").json() == baseline["unassigned"]
+
+
+def test_sql_export_round_trips_schema_and_data(client):
+    generated = client.post("/api/v1/datasets/generate", json={
+        "seed": 20261113, "students": 80, "exams": 8, "rooms": 6,
+        "invigilators": 8, "include_edge_cases": True,
+    })
+    assert generated.status_code == 200, generated.text
+    response = client.get("/api/v1/exports/sql")
+    assert response.status_code == 200
+    assert "application/sql" in response.headers["content-type"]
+    assert 'filename="examflow-database.sql"' in response.headers["content-disposition"]
+    assert "CREATE TABLE students" in response.text
+    assert "CREATE TABLE edge_case_labels" in response.text
+
+    restored = sqlite3.connect(":memory:")
+    try:
+        restored.executescript(response.text)
+        assert restored.execute("SELECT COUNT(*) FROM students").fetchone()[0] == 80
+        assert restored.execute("SELECT COUNT(*) FROM exams").fetchone()[0] == 8
+        assert restored.execute("SELECT COUNT(*) FROM edge_case_labels").fetchone()[0] > 0
+        assert restored.execute("PRAGMA foreign_key_check").fetchall() == []
+    finally:
+        restored.close()
+
