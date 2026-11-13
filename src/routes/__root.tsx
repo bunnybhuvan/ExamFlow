@@ -142,9 +142,9 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  const [authState, setAuthState] = useState<
-    "loading" | "disabled" | "login" | "authenticated"
-  >("loading");
+  const [authState, setAuthState] = useState<"loading" | "disabled" | "login" | "authenticated">(
+    "loading",
+  );
   const [authUser, setAuthUser] = useState<{
     id: string;
     email: string;
