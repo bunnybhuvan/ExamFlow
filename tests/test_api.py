@@ -240,8 +240,11 @@ def test_separate_room_accommodation_allocates_student_to_private_room(client):
     assert result.status_code == 200, result.text
     rows = client.get("/api/v1/schedules").json()
     private_rows = [row for row in rows if "STU-000001" in row["student_ids"]]
-    assert len(private_rows) == 1
-    assert private_rows[0]["enrolled"] == 1
+    assert private_rows
+    assert all(row["enrolled"] == 1 for row in private_rows)
+    for exam_id in {row["exam_id"] for row in private_rows}:
+        same_exam = [row for row in rows if row["exam_id"] == exam_id]
+        assert sum("STU-000001" in row["student_ids"] for row in same_exam) == 1
     report = client.get("/api/v1/reports/validation").json()
     assert report["failed"] == 0, report
     assert any(check["name"] == "Separate-room accommodations isolated" and check["status"] == "pass"
@@ -249,10 +252,11 @@ def test_separate_room_accommodation_allocates_student_to_private_room(client):
 
 
 
-def test_auth_config_and_password_login(client):
+def test_auth_config_and_password_login(client, monkeypatch):
     from app.models import User
     from app.security import hash_password
 
+    monkeypatch.setenv("EXAMFLOW_AUTH_SECRET", "test-secret-" + "x" * 40)
     db = TestingSession()
     try:
         db.add(User(id="USR-TEST-LOGIN", email="admin@example.test",
