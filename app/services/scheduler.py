@@ -1,5 +1,5 @@
 import random, time, uuid, math
-from datetime import date, datetime, time as dtime, timedelta
+from datetime import date, datetime, time as dtime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from ..models import (Student, Exam, Room, Invigilator, Enrollment, Assignment,
@@ -16,7 +16,7 @@ BUILDINGS = ["Turing Hall","Curie Centre","Newton Block","Tagore Wing","Vikram C
 def add_event(db: Session, action: str, entity_type: str, entity_id: str, summary: str, before=None, after=None):
     db.add(ScheduleEvent(id=f"EVT-{uuid.uuid4().hex[:16].upper()}", actor="scheduler-engine",
         action=action, entity_type=entity_type, entity_id=entity_id, summary=summary,
-        before=before, after=after, timestamp=datetime.utcnow()))
+        before=before, after=after, timestamp=datetime.now(timezone.utc)))
 
 def generate_dataset(db: Session, p):
     # Clear dependent data first; this is a deliberate full dataset replacement.
@@ -412,6 +412,6 @@ def validation_report(db: Session):
     add("Required equipment available","hard",len(equip),"Assigned rooms must contain all required equipment.","high",equip)
     add("Accessibility accommodations respected","hard",len(accom),"Students with accessibility accommodations must be assigned to accessible rooms.","high",accom)
     add("Invigilator availability respected","hard",len(inv_avail),"Invigilators must only be assigned on available days.","high",inv_avail)
-    report={"generated_at":datetime.utcnow().isoformat()+"Z","passed":sum(c["status"]=="pass" for c in checks),
+    report={"generated_at":datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),"passed":sum(c["status"]=="pass" for c in checks),
         "failed":sum(c["status"]=="fail" for c in checks),"warnings":0,"checks":checks}
     return report
