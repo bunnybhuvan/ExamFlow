@@ -2,12 +2,15 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 import csv, io, json, os
 from datetime import timezone
-from fastapi import FastAPI, Depends, HTTPException, Response
+from fastapi import FastAPI, Depends, HTTPException, Response, Request
+from pydantic import BaseModel, Field
+import uuid
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text, select, JSON
 from sqlalchemy.schema import CreateTable, CreateIndex
-from .database import Base, engine, get_db
+from .database import Base, engine, get_db, SessionLocal
+from .security import auth_middleware, auth_enabled, hash_password, verify_password, issue_token
 from . import models
 from .schemas import DatasetRequest, ScheduleRequest, ExamInput
 from .services.scheduler import (generate_dataset, generate_schedule, assignment_rows,
@@ -16,9 +19,58 @@ from .services.scheduler import (generate_dataset, generate_schedule, assignment
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    if engine.dialect.name == "postgresql":
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE assignments ADD COLUMN IF NOT EXISTS student_ids JSON NOT NULL DEFAULT '[]'::json"))
+            connection.execute(text("ALTER TABLE assignments DROP CONSTRAINT IF EXISTS assignments_exam_id_key"))
+    elif engine.dialect.name == "sqlite":
+        with engine.begin() as connection:
+            columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(assignments)")}
+            table_sql = connection.exec_driver_sql("SELECT sql FROM sqlite_master WHERE type='table' AND name='assignments'").scalar_one()
+            if "student_ids" not in columns or "UNIQUE (exam_id)" in (table_sql or ""):
+                connection.exec_driver_sql("ALTER TABLE assignments RENAME TO assignments_legacy")
+                connection.exec_driver_sql("""
+                    CREATE TABLE assignments (
+                        id VARCHAR(160) NOT NULL PRIMARY KEY,
+                        exam_id VARCHAR(40) NOT NULL,
+                        student_ids JSON NOT NULL DEFAULT '[]',
+                        room_id VARCHAR(32) NOT NULL,
+                        invigilator_ids JSON NOT NULL,
+                        start DATETIME NOT NULL,
+                        "end" DATETIME NOT NULL,
+                        status VARCHAR(20) NOT NULL,
+                        FOREIGN KEY(exam_id) REFERENCES exams(id) ON DELETE CASCADE,
+                        FOREIGN KEY(room_id) REFERENCES rooms(id)
+                    )
+                """)
+                legacy_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(assignments_legacy)")}
+                student_expr = "student_ids" if "student_ids" in legacy_columns else "'[]'"
+                connection.exec_driver_sql(f"""
+                    INSERT INTO assignments (id,exam_id,student_ids,room_id,invigilator_ids,start,"end",status)
+                    SELECT id,exam_id,{student_expr},room_id,invigilator_ids,start,"end",status FROM assignments_legacy
+                """)
+                connection.exec_driver_sql("DROP TABLE assignments_legacy")
+                connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_assignments_exam_id ON assignments(exam_id)")
+                connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_assignments_start ON assignments(start)")
+    if auth_enabled():
+        secret = os.getenv("EXAMFLOW_AUTH_SECRET", "")
+        email = os.getenv("EXAMFLOW_ADMIN_EMAIL", "").strip().lower()
+        password = os.getenv("EXAMFLOW_ADMIN_PASSWORD", "")
+        if len(secret) < 32 or not email or len(password) < 12:
+            raise RuntimeError("Secure startup requires EXAMFLOW_AUTH_SECRET (32+ chars), EXAMFLOW_ADMIN_EMAIL and EXAMFLOW_ADMIN_PASSWORD (12+ chars).")
+        db = SessionLocal()
+        try:
+            admin = db.query(models.User).filter_by(email=email).first()
+            if not admin:
+                db.add(models.User(id=f"USR-{uuid.uuid4().hex[:16]}", email=email,
+                    password_hash=hash_password(password), role="admin", active=True))
+                db.commit()
+        finally:
+            db.close()
     yield
 
 app = FastAPI(title="ExamFlow API", description="Deterministic examination scheduling and validation service.", version="1.0.0", lifespan=lifespan)
+app.middleware("http")(auth_middleware)
 def configured_cors_origins():
     configured = os.getenv("EXAMFLOW_CORS_ORIGINS")
     if configured is None:
@@ -50,6 +102,79 @@ def health_database(db: Session=Depends(get_db)):
         return {"status":"connected","database":engine.dialect.name}
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Database unavailable: {exc}")
+
+
+class LoginInput(BaseModel):
+    email: str = Field(min_length=3, max_length=200)
+    password: str = Field(min_length=1, max_length=256)
+
+
+class UserCreateInput(BaseModel):
+    email: str = Field(min_length=3, max_length=200)
+    password: str = Field(min_length=12, max_length=256)
+    role: str = Field(default="viewer")
+
+
+class PasswordChangeInput(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=12, max_length=256)
+
+
+@app.get("/api/v1/auth/config")
+def auth_config():
+    return {"enabled": auth_enabled()}
+
+
+@app.post("/api/v1/auth/login")
+def auth_login(payload: LoginInput, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter_by(email=payload.email.strip().lower()).first()
+    if not user or not user.active or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+    return {"access_token": issue_token(user), "token_type": "bearer", "expires_in": 28800,
+        "user": {"id": user.id, "email": user.email, "role": user.role}}
+
+
+@app.get("/api/v1/auth/me")
+def auth_me(request: Request):
+    return request.state.user
+
+
+@app.post("/api/v1/auth/change-password")
+def auth_change_password(payload: PasswordChangeInput, request: Request, db: Session = Depends(get_db)):
+    user = db.get(models.User, request.state.user["id"])
+    if not user or not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect.")
+    user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    return {"status": "password_updated"}
+
+
+@app.post("/api/v1/auth/users", status_code=201)
+def auth_create_user(payload: UserCreateInput, request: Request, db: Session = Depends(get_db)):
+    if request.state.user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Administrator role required.")
+    if payload.role not in {"admin", "scheduler", "viewer"}:
+        raise HTTPException(status_code=422, detail="Role must be admin, scheduler or viewer.")
+    email = payload.email.strip().lower()
+    if db.query(models.User).filter_by(email=email).first():
+        raise HTTPException(status_code=409, detail="An account with this email already exists.")
+    user = models.User(id=f"USR-{uuid.uuid4().hex[:16]}", email=email,
+        password_hash=hash_password(payload.password), role=payload.role, active=True)
+    db.add(user)
+    db.commit()
+    add_event(db, "user.created", "user", user.id, f"Created {payload.role} account {email}.",
+        after={"email": email, "role": payload.role})
+    db.commit()
+    return {"id": user.id, "email": user.email, "role": user.role, "active": user.active}
+
+
+@app.get("/api/v1/auth/users")
+def auth_list_users(request: Request, db: Session = Depends(get_db)):
+    if request.state.user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Administrator role required.")
+    return [{"id": u.id, "email": u.email, "role": u.role, "active": u.active}
+        for u in db.query(models.User).order_by(models.User.email).all()]
+
 
 @app.post("/api/v1/datasets/generate")
 def datasets_generate(payload: DatasetRequest, db: Session=Depends(get_db)):
