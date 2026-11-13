@@ -23,6 +23,35 @@ async def lifespan(app: FastAPI):
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE assignments ADD COLUMN IF NOT EXISTS student_ids JSON NOT NULL DEFAULT '[]'::json"))
             connection.execute(text("ALTER TABLE assignments DROP CONSTRAINT IF EXISTS assignments_exam_id_key"))
+    elif engine.dialect.name == "sqlite":
+        with engine.begin() as connection:
+            columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(assignments)")}
+            table_sql = connection.exec_driver_sql("SELECT sql FROM sqlite_master WHERE type='table' AND name='assignments'").scalar_one()
+            if "student_ids" not in columns or "UNIQUE (exam_id)" in (table_sql or ""):
+                connection.exec_driver_sql("ALTER TABLE assignments RENAME TO assignments_legacy")
+                connection.exec_driver_sql("""
+                    CREATE TABLE assignments (
+                        id VARCHAR(160) NOT NULL PRIMARY KEY,
+                        exam_id VARCHAR(40) NOT NULL,
+                        student_ids JSON NOT NULL DEFAULT '[]',
+                        room_id VARCHAR(32) NOT NULL,
+                        invigilator_ids JSON NOT NULL,
+                        start DATETIME NOT NULL,
+                        "end" DATETIME NOT NULL,
+                        status VARCHAR(20) NOT NULL,
+                        FOREIGN KEY(exam_id) REFERENCES exams(id) ON DELETE CASCADE,
+                        FOREIGN KEY(room_id) REFERENCES rooms(id)
+                    )
+                """)
+                legacy_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(assignments_legacy)")}
+                student_expr = "student_ids" if "student_ids" in legacy_columns else "'[]'"
+                connection.exec_driver_sql(f"""
+                    INSERT INTO assignments (id,exam_id,student_ids,room_id,invigilator_ids,start,"end",status)
+                    SELECT id,exam_id,{student_expr},room_id,invigilator_ids,start,"end",status FROM assignments_legacy
+                """)
+                connection.exec_driver_sql("DROP TABLE assignments_legacy")
+                connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_assignments_exam_id ON assignments(exam_id)")
+                connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_assignments_start ON assignments(start)")
     if auth_enabled():
         secret = os.getenv("EXAMFLOW_AUTH_SECRET", "")
         email = os.getenv("EXAMFLOW_ADMIN_EMAIL", "").strip().lower()
