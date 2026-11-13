@@ -56,6 +56,7 @@ export const assignmentResponse = z.object({
   room_id: text,
   room_name: text,
   invigilator_ids: strings,
+  student_ids: strings.optional().default([]),
   start: date,
   end: date,
   enrolled: count,
