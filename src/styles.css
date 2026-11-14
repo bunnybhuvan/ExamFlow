@@ -97,9 +97,7 @@
   --gradient-brand: #315b70;
   --gradient-surface: #ffffff;
   --gradient-glow: none;
-  --shadow-panel:
-    0 1px 2px rgb(28 43 47 / 4%),
-    0 8px 24px rgb(28 43 47 / 3%);
+  --shadow-panel: 0 1px 2px rgb(28 43 47 / 4%), 0 8px 24px rgb(28 43 47 / 3%);
   --shadow-glow: 0 1px 2px rgb(28 43 47 / 8%);
 }
 
