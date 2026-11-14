@@ -7,8 +7,12 @@ ExamFlow helps academic teams organise examinations, allocate rooms, assign invi
 [![Live application](https://img.shields.io/badge/Live%20app-Open%20ExamFlow-3157D5?style=for-the-badge)](https://examflow-theta.vercel.app)
 [![API documentation](https://img.shields.io/badge/API%20docs-Swagger-159B78?style=for-the-badge)](https://examflow-api-f24k.onrender.com/docs)
 
+# Live Link
 
 Application : https://examflow-theta.vercel.app/
+
+# Credentials
+
 Email : admin@examflow.demo
 Password : mls4zw1c_B8FQ1nn7l8Kju7o
 
