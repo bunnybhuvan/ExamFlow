@@ -28,13 +28,13 @@ export function TopBar() {
   const issues = deriveConflicts(validation.data, unassigned.data).slice(0, 6);
   return (
     <header className="sticky top-0 z-20 flex h-[62px] items-center gap-3 border-b border-border px-4 md:px-7">
-      <SidebarTrigger aria-label="Toggle sidebar" className="text-[#617176]" />
+      <SidebarTrigger aria-label="Toggle sidebar" className="text-[#61718c]" />
       <nav aria-label="Breadcrumb" className="hidden items-center gap-2 text-[13px] lg:flex">
-        <Link to="/" className="text-[#849094] hover:text-[#34474e]">
+        <Link to="/" className="text-[#8a93a3] hover:text-[#3157d5]">
           Workspace
         </Link>
         <ChevronRight className="size-3.5 text-[#a2acab]" />
-        <span className="font-semibold text-[#2b3d43]">{page?.title ?? "Overview"}</span>
+        <span className="font-semibold text-[#17263d]">{page?.title ?? "Overview"}</span>
       </nav>
       <div className="flex min-w-0 flex-1 justify-center px-2 md:px-5">
         <CommandSearch />
@@ -45,11 +45,11 @@ export function TopBar() {
             variant="ghost"
             size="icon"
             aria-label={`Notifications (${issues.length})`}
-            className="relative text-[#68777b] hover:text-[#263d47]"
+            className="relative text-[#64718a] hover:text-[#3157d5]"
           >
             <Bell />
             {issues.length > 0 && (
-              <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-[#b65d57] ring-2 ring-[#f4f5f3]" />
+              <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-[#d85c69] ring-2 ring-[#f5f2eb]" />
             )}
           </Button>
         </PopoverTrigger>
@@ -95,8 +95,8 @@ export function TopBar() {
             aria-label="Workspace menu"
             className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <Avatar className="size-8 border border-[#dce4e0] bg-white">
-              <AvatarFallback className="bg-[#e8efed] text-xs font-semibold text-[#355c6d]">
+            <Avatar className="size-8 border border-[#e4dfd4] bg-[#fffdf8]">
+              <AvatarFallback className="bg-[#e3e9ff] text-xs font-semibold text-[#3157d5]">
                 EF
               </AvatarFallback>
             </Avatar>

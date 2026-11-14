@@ -24,14 +24,14 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <Link to="/" className="flex items-center gap-3 px-2 py-1.5">
-          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[#315b70] text-white">
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[#f0a64b] text-[#17263d]">
             <CalendarDays className="size-[18px]" strokeWidth={1.8} />
           </span>
           <span className="min-w-0 group-data-[collapsible=icon]:hidden">
-            <span className="block text-[15px] font-semibold tracking-[-0.04em] text-[#263940]">
+            <span className="block text-[15px] font-semibold tracking-[-0.04em] text-[#f7f3e9]">
               ExamFlow
             </span>
-            <span className="mt-0.5 block text-[10px] font-medium tracking-[0.08em] text-[#879396]">
+            <span className="mt-0.5 block text-[10px] font-medium tracking-[0.08em] text-[#9aabc1]">
               EXAM OPERATIONS
             </span>
           </span>
@@ -69,10 +69,10 @@ export function AppSidebar() {
                 className={cn(
                   "size-2 shrink-0 rounded-full",
                   mode === "api"
-                    ? "bg-[#4c8a6b]"
+                    ? "bg-[#36c28a]"
                     : mode === "demo"
-                      ? "bg-[#b98745]"
-                      : "animate-pulse bg-[#9aa6a5]",
+                      ? "bg-[#f0a64b]"
+                      : "animate-pulse bg-[#92a4bd]",
                 )}
               />
               <span className="group-data-[collapsible=icon]:hidden">
