@@ -111,7 +111,7 @@ The backend now creates these normalized tables alongside legacy compatibility c
 - `availabilities`: one row per invigilator/date with uniqueness and a foreign key.
 - `accommodations`: student- or exam-scoped accommodation records with subject and effective-date checks.
 
-The legacy JSON/scalar fields remain in place for backward compatibility with the existing scheduling engine and API. Generated datasets now populate both representations from the same deterministic source records. This is an additive schema change; no existing tables or production rows are dropped. The scheduling engine continues to read compatibility fields in this iteration, so the normalized tables are currently a relationally validated mirror rather than the authoritative runtime read path.
+The legacy JSON/scalar fields remain in place for backward compatibility with the existing scheduling engine and API. Generated datasets now populate both representations from the same deterministic source records. This is an additive schema change; no existing tables or production rows are dropped. The scheduling engine reads normalized Course/ExamCourse, ExamRequirement, RoomCapacity, Availability and Accommodation records when present. Legacy scalar/JSON columns are compatibility fallbacks for manually-created or pre-normalization records. Runtime tests deliberately make normalized availability and capacity disagree with the legacy mirrors and assert that normalized records control the scheduling result.
 
 
 ## Reproducibility and complete data package
