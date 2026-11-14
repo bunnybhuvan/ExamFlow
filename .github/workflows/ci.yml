@@ -28,8 +28,6 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bunx eslint . --max-warnings 0
-      - name: Print formatted stylesheet for diagnosis
-        run: bunx prettier src/styles.css
       - run: bunx prettier --check "src/**/*.{ts,tsx,css}" "vite.config.ts" "vitest.config.ts" "eslint.config.js"
       - run: bunx vitest run
       - run: bunx tsc --noEmit
