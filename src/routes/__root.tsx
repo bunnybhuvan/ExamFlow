@@ -103,7 +103,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:card", content: "summary_large_image" },
       { property: "og:site_name", content: "ExamFlow" },
       { name: "application-name", content: "ExamFlow" },
-      { name: "theme-color", content: "#f4f5f3" },
+      { name: "theme-color", content: "#f5f2eb" },
     ],
     links: [
       {
@@ -278,7 +278,7 @@ function RootComponent() {
               <div className="flex min-h-screen w-full">
                 <AppSidebar />
                 <SidebarInset className="min-w-0 bg-transparent">
-                  <div className="flex items-center justify-end gap-3 border-b border-border bg-white/70 px-4 py-2.5 text-xs text-muted-foreground">
+                  <div className="flex items-center justify-end gap-3 border-b border-border bg-[#fffdf8]/85 px-4 py-2.5 text-xs text-muted-foreground">
                     {authUser && (
                       <span>
                         {authUser.email} · {authUser.role}
