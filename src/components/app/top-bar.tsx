@@ -73,7 +73,9 @@ export function TopBar() {
               <li key={c.id} className="border-b border-border px-4 py-2.5 last:border-0">
                 <div className="flex items-center gap-2">
                   <SeverityBadge severity={c.severity} />
-                  <span className="font-mono text-[10px] text-muted-foreground">{c.reason_code}</span>
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    {c.reason_code}
+                  </span>
                 </div>
                 <p className="mt-1 line-clamp-2 text-xs text-foreground">{c.title}</p>
               </li>
