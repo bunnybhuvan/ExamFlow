@@ -4,8 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - ".github/workflows/production-acceptance.yml"
 
 permissions:
   contents: read
@@ -30,6 +28,13 @@ jobs:
               request = urllib.request.Request(base + path, headers={"Accept": "application/json"})
               with urllib.request.urlopen(request, timeout=60) as response:
                   return response.status, json.loads(response.read())
+
+          frontend = os.environ["FRONTEND_ORIGIN"]
+          frontend_request = urllib.request.Request(frontend, headers={"Accept": "text/html"})
+          with urllib.request.urlopen(frontend_request, timeout=45) as response:
+              html = response.read().decode("utf-8", errors="replace")
+              assert response.status == 200 and "<html" in html.lower(), response.status
+          print("PASS: production frontend responds with HTML")
 
           status, health = get("/health")
           assert status == 200, health

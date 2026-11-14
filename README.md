@@ -82,7 +82,7 @@ For evaluation scenarios, set `include_edge_cases` to `true`. This creates separ
 
 ## Scheduling approach
 
-The engine is deterministic for a given dataset and request. It sorts exams by constraint difficulty (accessibility, equipment, enrollment and duration), then evaluates weekday time slots and suitable rooms. A candidate is accepted only when capacity, room availability, equipment, student rest/conflict checks, invigilator availability and workload limits pass. The engine assigns one room per exam; splitting a single exam across multiple rooms is intentionally outside this version's scope.
+The engine is deterministic for a given dataset and request. It sorts exams by constraint difficulty (accessibility, equipment, enrollment and duration), then evaluates weekday time slots and suitable rooms. A candidate is accepted only when capacity, room availability, equipment, student rest/conflict checks, invigilator availability and workload limits pass. Standard exams use one room. When a student requires a separate room, the engine can allocate that student to a dedicated room and place the remaining cohort in a separate main room; each room receives its own invigilation coverage. The validator checks that every enrolled student is allocated exactly once and that no room, student or invigilator conflicts are introduced.
 
 Unassigned exams retain explicit reason codes such as `NO_ROOM_CAPACITY`, `ROOM_CLOSED`, `EQUIPMENT_UNAVAILABLE`, `STUDENT_CONFLICT`, `NO_INVIGILATOR`, `ACCOMMODATION_CONFLICT`, `UNSUPPORTED_ACCOMMODATION` and `NO_VALID_TIME_SLOT`.
 
@@ -143,4 +143,4 @@ See [AUDIT.md](./AUDIT.md) for the frontend audit, confirmed repairs, test evide
 
 ## Scope notes
 
-This is a demonstrable scheduling MVP, not a university SIS integration. It schedules each exam in one room and uses local SQLite for reproducible evaluation. The free hosted deployment uses external PostgreSQL because Render's free filesystem is ephemeral. Production deployment now includes optional bearer-token authentication, role-based access controls, separate-room allocation support, and documented recovery procedures. Institution-specific retention, disaster-recovery objectives and operational policies still require administrator approval.
+This is a demonstrable scheduling MVP, not a university SIS integration. It uses local SQLite for reproducible evaluation and supports hosted PostgreSQL. Production deployment includes bearer-token authentication, role-based access controls, separate-room accommodation allocation, and documented recovery procedures. Institution-specific retention, disaster-recovery objectives and operational policies still require administrator approval.
