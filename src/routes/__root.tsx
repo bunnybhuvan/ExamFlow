@@ -128,7 +128,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className="light">
       <head>
         <HeadContent />
       </head>
@@ -220,15 +220,15 @@ function RootComponent() {
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <form
           onSubmit={submitLogin}
-          className="w-full max-w-md space-y-5 rounded-2xl border border-border bg-card p-8 shadow-xl"
+          className="w-full max-w-md space-y-5 rounded-2xl border border-border bg-card p-8 shadow-xl sm:p-9"
         >
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+            <p className="text-xs font-semibold tracking-[0.08em] text-primary">
               ExamFlow secure access
             </p>
             <h1 className="mt-2 text-3xl font-bold text-foreground">Sign in</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Use your university operations account.
+              Sign in with your university operations account.
             </p>
           </div>
           <label className="block space-y-2 text-sm font-medium text-foreground">
@@ -262,7 +262,7 @@ function RootComponent() {
             disabled={submitting}
             className="w-full rounded-md bg-primary px-4 py-2.5 font-semibold text-primary-foreground disabled:opacity-50"
           >
-            {submitting ? "Signing in…" : "Sign in securely"}
+            {submitting ? "Signing in…" : "Sign in"}
           </button>
         </form>
       </div>
@@ -278,7 +278,7 @@ function RootComponent() {
               <div className="flex min-h-screen w-full">
                 <AppSidebar />
                 <SidebarInset className="min-w-0 bg-transparent">
-                  <div className="flex items-center justify-end gap-3 border-b border-border/60 px-4 py-2 text-xs text-muted-foreground">
+                  <div className="flex items-center justify-end gap-3 border-b border-border bg-white/70 px-4 py-2.5 text-xs text-muted-foreground">
                     {authUser && (
                       <span>
                         {authUser.email} · {authUser.role}
@@ -299,7 +299,7 @@ function RootComponent() {
                   </div>
                   <TopBar />
                   <DemoBanner />
-                  <main className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-6 md:px-6 lg:px-8">
+                  <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-7 md:px-7 lg:px-9">
                     <Outlet />
                   </main>
                 </SidebarInset>
