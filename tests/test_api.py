@@ -218,6 +218,9 @@ def test_postgresql_connection_url_normalization():
 
 
 def test_separate_room_accommodation_allocates_student_to_private_room(client):
+    from datetime import date
+    from app.models import Accommodation, Student
+
     generated = client.post("/api/v1/datasets/generate", json={
         "seed": 20261113, "students": 80, "exams": 8, "rooms": 12,
         "invigilators": 16, "include_edge_cases": False,
@@ -225,9 +228,20 @@ def test_separate_room_accommodation_allocates_student_to_private_room(client):
     assert generated.status_code == 200, generated.text
     db = TestingSession()
     try:
-        student = db.get(__import__("app.models", fromlist=["Student"]).Student, "STU-000001")
+        student = db.get(Student, "STU-000001")
         assert student is not None
-        student.accommodations = ["separate_room"]
+        # Exercise the normalized accommodation table, not the legacy JSON mirror.
+        db.query(Accommodation).filter(Accommodation.student_id == student.id).delete()
+        db.add(Accommodation(
+            id="TEST-SEPARATE-ROOM-STU-000001",
+            student_id=student.id,
+            exam_id=None,
+            accommodation_type="separate_room",
+            details="Dedicated individual examination room",
+            effective_from=date(2026, 1, 1),
+            effective_to=None,
+        ))
+        student.accommodations = []
         db.commit()
     finally:
         db.close()
