@@ -11,6 +11,9 @@ ExamFlow helps academic teams organise examinations, allocate rooms, assign invi
 
 The screenshots below show the main ExamFlow workspace and its core operational pages.
 
+![ExamFlow product screenshots — Overview, Schedule, Exams, Students, Rooms, Invigilators and Reports](docs/screenshots/examflow-product-screens.webp)
+
+
 | Screen | What it shows |
 |---|---|
 | **Overview** | Exam coverage, scheduled and unassigned counts, conflicts, room utilisation and recent audit activity. |
