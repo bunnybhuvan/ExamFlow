@@ -1,11 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  AlertTriangle,
-  CalendarDays,
-  CheckCircle2,
-  ClipboardList,
-  Users,
-} from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, ClipboardList, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { KpiCard, PageHeader, Chips, Meter } from "@/components/app/primitives";
@@ -48,7 +42,9 @@ function InvigilatorsPage() {
   const capacity = staff.reduce((sum, person) => sum + person.max_duties, 0);
   const conflicts = staff.reduce((sum, person) => sum + person.conflicts, 0);
   const averageAvailability = staff.length
-    ? Math.round(staff.reduce((sum, person) => sum + person.available_days.length, 0) / staff.length)
+    ? Math.round(
+        staff.reduce((sum, person) => sum + person.available_days.length, 0) / staff.length,
+      )
     : 0;
   const remaining = Math.max(0, capacity - assigned);
 
@@ -62,7 +58,9 @@ function InvigilatorsPage() {
             {initials(v.name)}
           </span>
           <span className="min-w-0">
-            <span className="block truncate text-[13px] font-semibold text-[#28383e]">{v.name}</span>
+            <span className="block truncate text-[13px] font-semibold text-[#28383e]">
+              {v.name}
+            </span>
             <span className="mt-0.5 block truncate text-xs text-[#849094]">{v.department}</span>
           </span>
         </div>
@@ -145,8 +143,8 @@ function InvigilatorsPage() {
             Invigilator roster
           </h1>
           <p className="mt-2 max-w-2xl text-[13px] leading-6 text-[#77868a]">
-            The people behind every exam session. Review availability, specialist qualifications
-            and duty allocation before building the timetable.
+            The people behind every exam session. Review availability, specialist qualifications and
+            duty allocation before building the timetable.
           </p>
         </div>
         <div className="flex items-center gap-2 pb-1 text-[11px] text-[#78888a]">
@@ -158,7 +156,10 @@ function InvigilatorsPage() {
         </div>
       </div>
 
-      <section aria-label="Invigilator capacity overview" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section
+        aria-label="Invigilator capacity overview"
+        className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+      >
         <KpiCard
           label="Invigilators"
           value={staff.length}
@@ -196,7 +197,10 @@ function InvigilatorsPage() {
       <section aria-labelledby="roster-heading" className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3 px-1">
           <div>
-            <h2 id="roster-heading" className="text-[15px] font-semibold tracking-[-0.02em] text-[#2e4147]">
+            <h2
+              id="roster-heading"
+              className="text-[15px] font-semibold tracking-[-0.02em] text-[#2e4147]"
+            >
               Staff directory
             </h2>
             <p className="mt-1 text-xs text-[#849094]">
