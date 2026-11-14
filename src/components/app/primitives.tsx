@@ -104,23 +104,21 @@ export function KpiCard({
   loading?: boolean;
 }) {
   const toneCls = {
-    brand: "text-primary bg-primary/15",
-    success: "text-success bg-success/15",
-    warning: "text-warning bg-warning/15",
-    danger: "text-destructive bg-destructive/15",
-    info: "text-info bg-info/15",
+    brand: "text-primary bg-[#eaf0ef]",
+    success: "text-success bg-[#eaf1ec]",
+    warning: "text-warning bg-[#f5f0e7]",
+    danger: "text-destructive bg-[#f6ecea]",
+    info: "text-info bg-[#edf1f3]",
   }[tone];
   return (
-    <div className="glass group relative overflow-hidden rounded-xl p-4 transition-transform duration-200 hover:-translate-y-0.5">
+    <div className="glass group relative overflow-hidden rounded-xl p-5 transition-shadow duration-200 hover:shadow-md">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          {label}
-        </span>
-        <span className={cn("grid size-8 place-items-center rounded-lg", toneCls)}>
+        <span className="text-[12px] font-medium text-muted-foreground">{label}</span>
+        <span className={cn("grid size-8 place-items-center rounded-md", toneCls)}>
           <Icon className="size-4" />
         </span>
       </div>
-      <div className="mt-3 font-display text-3xl font-semibold tabular-nums text-foreground">
+      <div className="mt-4 font-display text-[30px] font-semibold tabular-nums tracking-[-0.04em] text-foreground">
         {loading ? (
           <Skeleton className="h-9 w-20" />
         ) : (
