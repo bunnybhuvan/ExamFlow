@@ -4,8 +4,8 @@
   "description": "Intelligent examination scheduling and operations platform.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f1424",
-  "theme_color": "#0f1424",
+  "background_color": "#f4f5f3",
+  "theme_color": "#f4f5f3",
   "icons": [
     {
       "src": "/favicon.svg",
