@@ -113,9 +113,7 @@ export function KpiCard({
   return (
     <div className="glass group relative overflow-hidden rounded-xl p-5 transition-shadow duration-200 hover:shadow-md">
       <div className="flex items-center justify-between">
-        <span className="text-[12px] font-medium text-muted-foreground">
-          {label}
-        </span>
+        <span className="text-[12px] font-medium text-muted-foreground">{label}</span>
         <span className={cn("grid size-8 place-items-center rounded-md", toneCls)}>
           <Icon className="size-4" />
         </span>
