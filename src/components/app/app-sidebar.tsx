@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { CalendarCheck2 } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -23,12 +23,17 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <Link to="/" className="flex items-center gap-2.5 px-1 py-1.5">
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-gradient shadow-glow">
-            <CalendarCheck2 className="size-4 text-primary-foreground" />
+        <Link to="/" className="flex items-center gap-3 px-2 py-1.5">
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[#315b70] text-white">
+            <CalendarDays className="size-[18px]" strokeWidth={1.8} />
           </span>
-          <span className="font-display text-base font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
-            ExamFlow
+          <span className="min-w-0 group-data-[collapsible=icon]:hidden">
+            <span className="block text-[15px] font-semibold tracking-[-0.04em] text-[#263940]">
+              ExamFlow
+            </span>
+            <span className="mt-0.5 block text-[10px] font-medium tracking-[0.08em] text-[#879396]">
+              EXAM OPERATIONS
+            </span>
           </span>
         </Link>
       </SidebarHeader>
@@ -59,19 +64,19 @@ export function AppSidebar() {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <div className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-sidebar-foreground/80">
+            <div className="flex items-center gap-2 rounded-md border border-[#e5eae7] bg-[#f5f7f5] px-3 py-2.5 text-xs text-[#657478]">
               <span
                 className={cn(
                   "size-2 shrink-0 rounded-full",
                   mode === "api"
-                    ? "bg-success"
+                    ? "bg-[#4c8a6b]"
                     : mode === "demo"
-                      ? "bg-warning"
-                      : "bg-muted-foreground animate-pulse",
+                      ? "bg-[#b98745]"
+                      : "animate-pulse bg-[#9aa6a5]",
                 )}
               />
               <span className="group-data-[collapsible=icon]:hidden">
-                {mode === "api" ? "API connected" : mode === "demo" ? "Demo mode" : "Connecting…"}
+                {mode === "api" ? "Connected to API" : mode === "demo" ? "Demo data" : "Connecting"}
               </span>
             </div>
           </SidebarMenuItem>
